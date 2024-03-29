@@ -115,6 +115,12 @@ This is not a comprehensive guide, here you have some basic instructions that ca
 
     Now that your job is running, and the tunnel to the node it is running on is open, we can start our local jupyter window. To do that, just open your internet browser, and copy the URL which you found in the `slurm-XXX.out`. 
 
+8. Cancel a job and delete it from the queue:
+
+    To cancel a job you need to execute this command: `scancel --name=jupyter`.
+    
+    Where (jupyter) must be replaced with the actual name of the job you have created.
+
 ## SSH config
 To avoid having to type out the server url every time, modify your `~/.ssh/config` to contain the following: 
 ```
