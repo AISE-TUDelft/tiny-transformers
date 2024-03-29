@@ -1,21 +1,27 @@
-\documentclass[english]{article}
-\usepackage[T1]{fontenc}
-\usepackage[latin9]{inputenc}
-\usepackage{geometry}
-\geometry{verbose,tmargin=3.5cm,bmargin=4cm,lmargin=3.8cm,rmargin=3.8cm}
 
-\makeatletter
+\documentclass{article}
+\pdfpagewidth=8.5in
+\pdfpageheight=11in
+\usepackage{ijcai20}
+
+% Use the postscript times font!
+\usepackage{times}
+\renewcommand*\ttdefault{txtt}
+\usepackage{soul}
 \usepackage{url}
-\usepackage{lipsum}  
-\usepackage{graphicx}  
+\usepackage[hidelinks]{hyperref}
+\usepackage[utf8]{inputenc}
+\usepackage[small]{caption}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\urlstyle{same}
 
-\makeatother
+\usepackage{todonotes}
 
-\usepackage{babel}
 \begin{document}
 
 \input{title_page}
-\onecolumn
 
 \input{sections/abstract}
 
@@ -24,9 +30,6 @@
 \input{sections/methodology_or_problem_description}
 
 \input{sections/your_contribution}
-
-%\bigskip
-%\lipsum[1-67]
 
 \input{sections/experimental_setup_and_results}
 
@@ -43,4 +46,6 @@
 
 A rule of thumb for dealing with the literature is the following: scan about 10--20 contributions: read title, abstract, part of introduction and conclusions; categorize contribution; some of these are studied in more depth: completely read about 5 conference papers or equivalent (summarize contribution in own words); of which studied in-depth about 2 conference papers (the student is able to explain in detail and criticize contributions). This may result in 5--20 references, possibly even more if the project is a literature study.
 
+
 \end{document}
+
