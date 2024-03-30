@@ -4,7 +4,7 @@
 > This document explains how to set up your paper 'the computer science way' (not sure how/why this isn't covered in academic writing). Prerequisites: have a `GitHub` and `Overleaf` account. 
 
 
-In this directory, you will place your (git submodule) repository for your paper. To work locally, I suggest the [Latex-Workshop](https://marketplace.visualstudio.com/items?itemName=James-Yu.latex-workshop) VSCode plugin (or [TeXStudio](https://www.texstudio.org/) if you *must* download a separate IDE per language). This requires you to [install a LaTeX distribution](https://www.tug.org/texlive/) (compiler), if you have not done so already. There are other local-development alternatives, Google is your friend. 
+In this directory, you will place your (git submodule) repository for your paper (e.g. `aral @ 72c5906`). To work locally, I suggest the [Latex-Workshop](https://marketplace.visualstudio.com/items?itemName=James-Yu.latex-workshop) VSCode plugin (or [TeXStudio](https://www.texstudio.org/) if you *must* download a separate IDE per language). This requires you to [install a LaTeX distribution](https://www.tug.org/texlive/) (compiler), if you have not done so already. There are other local-development alternatives, Google is your friend. 
 
 Why make a Git repository for your paper? Firstly, the above allows you to work locally and offline. Secondly, it should help with keeping track of different versions; `git` is a version-control tool you are familiar with, after all. Thirdly, it allows you to keep a repository on your personal github account of the paper you wrote, which you deserve to show off! And lastly, switching between different sections drove me crazy when writing on Overleaf - a tabbed editor handles this much better. 
 
@@ -43,10 +43,12 @@ Brief explanation of how to set up a git project and sync it with both GitHub an
     ```bash
     cd ..  # make sure you are in the project repo, and not your paper repo
     git submodule add \
-        -b main \ 
-        git@github.com:Ar4l/exploring-hidden-layers.git \
-        1-hidden-layers
+        -b main \                                           # branch to track
+        git@github.com:Ar4l/exploring-hidden-layers.git \   # repo url
+        1-hidden-layers                                     # submodule dir name
     ```
+
+One caveat of `git` submodules is that, even though we tell it explicitly to track the `main` branch of your paper submodule, you will need to manually commit those changes in the communal repo. I.e., when you push changes to the main branch of your paper; remember to also update the reference in the communal repo (this will show up as `modified` when running `git status` in the communal repo)
 
 That's all; you can leave it here. But, I leave the next two sections here if you happen to have the time. 
 

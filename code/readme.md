@@ -1,6 +1,6 @@
 # How to use DelftBlue
 
-This is not a comprehensive guide, here you have some basic instructions that can help you to start. To better understand how DelftBlue works, check out the [DOCUMENTATION](https://doc.dhpc.tudelft.nl/delftblue/).
+This is not a comprehensive guide, but should help you in setting up a development environment on the cluster. To better understand how DelftBlue works, check out its [docs](https://doc.dhpc.tudelft.nl/delftblue/).
 
 ## Setup
 
@@ -21,8 +21,8 @@ This is not a comprehensive guide, here you have some basic instructions that ca
     ln -s /scratch/${USER}/.cache ~/.cache
     ```
 
-## How use Jupyter notebooks on DelftBlue ([documentation](https://doc.dhpc.tudelft.nl/delftblue/howtos/jupyter/))
-1. After connecting to delft Blue load the following modules:
+## Running Jupyter Notebooks on DelftBlue ([documentation](https://doc.dhpc.tudelft.nl/delftblue/howtos/jupyter/))
+1. After connecting to DelftBlue load the following modules:
     ``` bash
     module load 2022r2      # base libraries 
     module load openmpi     # message passing interface (for parallel computing)
@@ -77,7 +77,7 @@ This is not a comprehensive guide, here you have some basic instructions that ca
     ```
     It will output a code, which is the `JOBID`.
 
-    Check if the job is running: `squeue --me`; from there you can also check the the `NODELIST` and the `JOBID`.
+    Check if the job is running: `squeue --me` (`ST == R`, or pending if `ST == PD`); from there you can also check the the `NODELIST` and the `JOBID`.
 
 5. Check out the output in your `slurm-XXX.out` file:
 
@@ -122,7 +122,8 @@ This is not a comprehensive guide, here you have some basic instructions that ca
     Where (jupyter) must be replaced with the actual name of the job you have created.
 
 ## SSH config
-To avoid having to type out the server url every time, modify your `~/.ssh/config` to contain the following: 
+To avoid having to type out your netid @ the server url every time, modify your `~/.ssh/config` to contain the following: 
+
 ```
 Host delftblue
   HostName login.delftblue.tudelft.nl
