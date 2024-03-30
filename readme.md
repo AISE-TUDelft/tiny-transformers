@@ -2,11 +2,20 @@
 
 This repository contains both the code and the papers for the Q4/2024 Bachelor Research Project: **Architectural Decisions for Language Modelling with (Small) Transformers**. 
 
-- [Zotero](https://www.zotero.org/groups/5467626/tiny_transformers) for managing our (shared) references. 
+- [Zotero Group](https://www.zotero.org/groups/5467626/tiny_transformers) for managing our (shared) references. 
+
+
+#### Overleaf links 
+
+> [!NOTE]
+> Please add your Overleaf links here once you have set them up ([guide](papers/readme.md)).
+
 
 --- 
 
 ## Architectural Decisions for Language Modelling with (Small) Transformers
+
+> Description from ProjectForum
 
 #### Prerequisites
 - Motivation to learn (i.e. read papers) about state-of-the-art natural-language modelling techniques.

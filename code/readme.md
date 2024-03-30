@@ -24,11 +24,11 @@ This is not a comprehensive guide, here you have some basic instructions that ca
 ## How use Jupyter notebooks on DelftBlue ([documentation](https://doc.dhpc.tudelft.nl/delftblue/howtos/jupyter/))
 1. After connecting to delft Blue load the following modules:
     ``` bash
-    module load 2022r2
-    module load openmpi
-    module load miniconda3
+    module load 2022r2      # base libraries 
+    module load openmpi     # message passing interface (for parallel computing)
+    module load miniconda3  # python environment & package management
     ```
-    Make sure your conda saves everything to /scratch:
+    Make sure your conda saves everything to `/scratch`, as your `/home` only has 5GB:
     ``` bash
     mkdir -p /scratch/${USER}/.conda
     ln -s /scratch/${USER}/.conda $HOME/.conda

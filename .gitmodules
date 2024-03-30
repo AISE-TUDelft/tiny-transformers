@@ -1,0 +1,4 @@
+[submodule "papers/aral"]
+	path = papers/aral
+	url = git@github.com:Ar4l/test-latex
+	branch = main
