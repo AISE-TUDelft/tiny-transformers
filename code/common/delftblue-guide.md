@@ -1,8 +1,8 @@
-# How to use DelftBlue
+## How to use DelftBlue
 
 This is not a comprehensive guide, but should help you in setting up a development environment on the cluster. To better understand how DelftBlue works, check out its [docs](https://doc.dhpc.tudelft.nl/delftblue/).
 
-## Setup
+#### Setup
 
 - **Connecting**, first, set up your ssh key (if you have not done so already) without a passphrase. In this way you'll not be asked for the password once you login.
     - You probably already have a key, check if `~/.ssh/id_rsa.pub` exists. If you need to create an ssh key: `ssh-keygen -t rsa `. 
@@ -21,7 +21,7 @@ This is not a comprehensive guide, but should help you in setting up a developme
     ln -s /scratch/${USER}/.cache ~/.cache
     ```
 
-## Running Jupyter Notebooks on DelftBlue ([documentation](https://doc.dhpc.tudelft.nl/delftblue/howtos/jupyter/))
+#### Running Jupyter Notebooks on DelftBlue ([documentation](https://doc.dhpc.tudelft.nl/delftblue/howtos/jupyter/))
 1. After connecting to DelftBlue load the following modules:
     ``` bash
     module load 2022r2      # base libraries 
@@ -120,6 +120,21 @@ This is not a comprehensive guide, but should help you in setting up a developme
     To cancel a job you need to execute this command: `scancel --name=jupyter`.
     
     Where (jupyter) must be replaced with the actual name of the job you have created.
+
+#### Submitting BG Tasks in an Interactive Session
+Say you are in an interactive shell connected to a GPU node. To run something in the background, I typically use a detached, background shell immune to holdups. In code, this translates to the following. Say you want to run a command like `python train.py`:
+
+```sh 
+nohup python train.py & disown 
+```
+
+To break that down: 
+
+- `disown` (detach) means it is no longer a child of your current shell, so should continue running even if this shell disconnects. 
+- `&` (background) means a new process is spawned for this command, meaning you can continue working in this shell. 
+- `nohup` (no holdups) means that when you disconnect, the `holdup` signal sent to the command will not stop it. 
+
+Note, DelftBlue will still kill your job (by sending a signal other than `holdup`) if the first shell you spawned is closed (e.g. because you disconnected). If you want to avoid this, just wrap that command as above. But, beware that shell will live for the duration of your session then. DelftBlue moderators do not like it if you are occupying resources without using them. 
 
 ## SSH config
 To avoid having to type out your netid @ the server url every time, modify your `~/.ssh/config` to contain the following: 
