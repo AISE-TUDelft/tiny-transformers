@@ -2,3 +2,7 @@
 	path = papers/aral
 	url = git@github.com:Ar4l/test-latex
 	branch = main
+[submodule "code/common/evaluation-pipeline"]
+	path = code/common/evaluation-pipeline
+	url = git@github.com:babylm/evaluation-pipeline.git
+	branch = main
