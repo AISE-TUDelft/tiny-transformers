@@ -2,7 +2,9 @@
 
 This repository contains both the code and the papers for the Q4/2024 Bachelor Research Project: **Architectural Decisions for Language Modelling with (Small) Transformers**. 
 
-- [Zotero Group](https://www.zotero.org/groups/5467626/tiny_transformers) for managing our (shared) references. 
+- [Zotero Group](https://www.zotero.org/groups/5467626/tiny_transformers) for managing our (shared) references.
+- [Mattermost Channel](https://mattermost.tudelft.nl/cse3000-2324q4/channels/tiny-transformers) for communication.
+- [Slide Deck](https://www.icloud.com/keynote/0487EgSVm26sNx1G3LGzfRtfw#Tiny_Transformers) for weekly meetings.
 
 
 #### Overleaf links 
