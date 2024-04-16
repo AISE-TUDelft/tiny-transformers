@@ -13,9 +13,9 @@ This repository contains both the code and the papers for the Q4/2024 Bachelor R
 
 --- 
 
-## Architectural Decisions for Language Modelling with (Small) Transformers
-
 > Description from ProjectForum
+
+## Architectural Decisions for Language Modelling with (Small) Transformers
 
 #### Prerequisites
 - Motivation to learn (i.e. read papers) about state-of-the-art natural-language modelling techniques.
