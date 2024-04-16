@@ -1,6 +1,6 @@
-## Code 
+## Replication Packages 
 
-> [!TODO] 
+> [!TIP] 
 > Create a subdirectory for your RQ and place all your replication code here. 
 
 #### Resources
