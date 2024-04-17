@@ -8,7 +8,7 @@ In this directory, you will place your (git submodule) repository for your paper
 
 Why make a Git repository for your paper? Firstly, the above allows you to work locally and offline. Secondly, it should help with keeping track of different versions; `git` is a version-control tool you are familiar with, after all. Thirdly, it allows you to keep a repository on your personal github account of the paper you wrote, which you deserve to show off! And lastly, switching between different sections drove me crazy when writing on Overleaf - a tabbed editor handles this much better. 
 
-Take some time to skim the [Latex-Workshop Wiki](https://github.com/James-Yu/LaTeX-Workshop/wiki/Install) (SyncTex is quite useful). Then, have a look at [Diomidis' Latex Advice](https://github.com/dspinellis/latex-advice/tree/master), which also contains a helpful bibtex schema in case you need to manually construct a citation. 
+Take some time to skim the [Latex-Workshop Wiki](https://github.com/James-Yu/LaTeX-Workshop/wiki/Install) (SyncTex is quite useful). Before you start writing, have a look at [Diomidis' Latex Advice](https://github.com/dspinellis/latex-advice/tree/master), which also contains a helpful bibtex schema in case you need to manually construct a citation. 
 
 
 #### Setting Up 
