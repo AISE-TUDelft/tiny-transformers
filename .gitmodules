@@ -6,3 +6,7 @@
 	path = code/common/evaluation-pipeline
 	url = git@github.com:babylm/evaluation-pipeline.git
 	branch = main
+[submodule "ffn-width"]
+	path = ffn-width
+	url = https://github.com/eugeneman418/Width-Wonders.git
+	branch = master
