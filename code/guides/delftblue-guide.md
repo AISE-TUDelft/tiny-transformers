@@ -12,7 +12,7 @@ This is not a comprehensive guide, but should help you in setting up a developme
         cat ~/.ssh/id_rsa.pub | ssh  <NETID>@login.delftblue.tudelft.nl 'cat >> .ssh/authorized_keys'
         ```
     
-    - **Setting up**, Your home directory has only space (**5 GB**), and you may not be able to connect if it is full. So, somehow anticipate which directories will be created, create respective directories under your `/scratch` folder (**5 TB**), and symlink them to `~.` These should cover most bases:
+    - **Setting up**, Your home directory has only space (**5 GB**), and you may not be able to connect if it is full. So, somehow anticipate which directories will be created, create respective directories under your `/scratch` folder (**5 TB**), and symlink them to `~` These should cover most bases:
     ``` bash
     echo ${USER} # this should be your netid
     mkdir /scratch/${USER}/.local
