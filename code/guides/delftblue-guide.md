@@ -42,7 +42,7 @@ This is not a comprehensive guide, but should help you in setting up a developme
     ```
     This step needs to be done only the first time, once you have created the conda environment with Jupyterlab loaded, you just need to `conda activate` the environment.
 
-3. Create a new submission script, e.g. `nano jupyterlab.sh`
+3. Create a new submission script, e.g. `nano jupyterlab.sh` (opinion: use `vim`, at least you can use the keybindings you learn in all your other programming tasks). 
 
     ``` bash
     #!/bin/bash
