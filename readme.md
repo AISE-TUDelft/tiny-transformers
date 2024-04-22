@@ -11,6 +11,7 @@ This repository contains both the code and the papers for the Q4/2024 Bachelor R
 
 > [!NOTE]
 > Please add your Overleaf links here once you have set them up ([guide](papers/readme.md)).
+> Filip's [Link](https://www.overleaf.com/read/bfkdnmbgkjdv#65d3fa)
 
 
 --- 
