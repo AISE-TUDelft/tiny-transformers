@@ -10,3 +10,15 @@
 	path = ffn-width
 	url = https://github.com/eugeneman418/Width-Wonders.git
 	branch = master
+[submodule "ffn-width-plan"]
+	path = ffn-width-plan
+	url = https://github.com/eugeneman418/Width-Wonders-Plan.git
+	branch = main
+[submodule "1-hidden-layers-plan"]
+	path = 1-hidden-layers-plan
+	url = https://github.com/eugeneman418/FFN-Unveiled-Plan.git
+	branch = main
+[submodule "1-hidden-layers"]
+	path = 1-hidden-layers
+	url = https://github.com/eugeneman418/FFN-Unveiled.git
+	branch = main
