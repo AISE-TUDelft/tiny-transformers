@@ -10,3 +10,7 @@
 	path = papers/depth-of-ffns
 	url = https://github.com/filipo18/depth-of-ffns
 	branch = main
+[submodule "papers/4-module-ordering"]
+	path = papers/4-module-ordering
+	url = git@github.com:laurikskl/module-ordering-in-transfomers.git
+	branch = main
