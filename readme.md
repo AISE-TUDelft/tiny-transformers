@@ -8,7 +8,7 @@ This repository contains both the code and the papers for the Q4/2024 Bachelor R
 
 
 #### Overleaf links 
-- [Width Wonders: Investigating Feedforward Network Width in Small LMs](https://www.overleaf.com/read/qqcrmwknqgvt#88bba0) by Yijun Wu
+- [Eugene](https://www.overleaf.com/read/qqcrmwknqgvt#88bba0)
 
 > [!NOTE]
 > Please add your Overleaf links here once you have set them up ([guide](papers/readme.md)).
