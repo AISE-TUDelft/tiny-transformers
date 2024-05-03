@@ -5,7 +5,7 @@
     "added_tokens": [
         {
             "id": 0,
-            "content": "<s>",
+            "content": "<pad>",
             "single_word": false,
             "lstrip": false,
             "rstrip": false,
@@ -14,7 +14,7 @@
         },
         {
             "id": 1,
-            "content": "<pad>",
+            "content": "<s>",
             "single_word": false,
             "lstrip": false,
             "rstrip": false,
@@ -64,7 +64,7 @@
         ],
         "cls": [
             "<s>",
-            0
+            1
         ],
         "trim_offsets": true,
         "add_prefix_space": false
@@ -84,8 +84,8 @@
       "fuse_unk": false,
       "byte_fallback": false,
       "vocab": {
-        "<s>": 0,
-        "<pad>": 1,
+        "<pad>": 0,
+        "<s>": 1,
         "</s>": 2,
         "<unk>": 3,
         "%": 4,

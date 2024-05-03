@@ -3,7 +3,7 @@
     "add_prefix_space": false,
     "added_tokens_decoder": {
       "0": {
-        "content": "<s>",
+        "content": "<pad>",
         "lstrip": false,
         "normalized": true,
         "rstrip": false,
@@ -11,7 +11,7 @@
         "special": true
       },
       "1": {
-        "content": "<pad>",
+        "content": "<s>",
         "lstrip": false,
         "normalized": true,
         "rstrip": false,
