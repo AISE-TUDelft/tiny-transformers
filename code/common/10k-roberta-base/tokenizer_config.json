@@ -52,5 +52,6 @@
   "pad_token": "<pad>",
   "sep_token": "</s>",
   "tokenizer_class": "RobertaTokenizer",
+  "trim_offsets": true,
   "unk_token": "<unk>"
 }
