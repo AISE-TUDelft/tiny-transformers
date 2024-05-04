@@ -1,4 +1,5 @@
-torch 
-transformers
+transformers[torch]
 datasets
 wandb
+tqdm
+torch
