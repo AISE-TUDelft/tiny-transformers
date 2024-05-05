@@ -1,4 +1,5 @@
 keys.txt
-code/lauri common/wandb/
-code/lauri common/tokenized_dataset/
-code/lauri common/results/models/
+
+tokenized_dataset
+wandb
+models
