@@ -1,8 +1,14 @@
 import os, sys, torch, wandb, numpy as np, random
 
-# wandb.login()
-TEST = len(sys.argv) > 0 and sys.argv[0] == 'test'
+# `python train_baselines.py debug` stops wandb sync and behaves like test
+# `python train_baselines.py test` uses smol dataset
 
+TEST = len(sys.argv) > 0 and sys.argv[1] == 'test'
+DEBUG = len(sys.argv) > 0 and sys.argv[1] == 'debug'
+if DEBUG: TEST = True 
+else: wandb.login()
+
+from typing import Any
 from datasets import load_from_disk 
 from transformers import (
     RobertaForMaskedLM, RobertaConfig, RobertaTokenizerFast,
@@ -12,64 +18,64 @@ from transformers import (
     set_seed
 )
 
-from grid_search import GridSearch, search # cheeky library i wrote
+# cheeky library i wrote; feel free to use anything else as well. 
+from grid_search import GridSearch, search 
 from dataclasses import dataclass, field 
 
 @dataclass 
 class Gpt(GridSearch):
     ''' extend GridSearch with dataclass to search the values in `search`,
-        can be used recursively. '''
+        can be used recursively; but you need to annotate your types! 
+
+        (a pretty fucking arbitrary constraint from dataclasses in a non-typed language 
+        especially if types can be directly inferred; but what do i know)
+    '''
 
     # EMBEDDING PARAMETERS
-    vocab_size              = 10_000,                       # number of tokens in the vocabulary 
-    hidden_size        :int = search([256, 384, 512]),      # embedding size (vector length) of each token 
-    max_position_embeddings = 512,                          # maximum sequence length (context window)
+    vocab_size              :int = 10_000                   # number of tokens in the vocabulary 
+    hidden_size             :int = search(256, 384, 512)    # embedding size (vector length) of each token 
+    max_position_embeddings :int = 512                      # maximum sequence length (context window)
 
     # BLOCKS (ATTN & FFN)
-    num_layers         :int = search([2, 3]),               # number of transformer blocks
-    attention_types         = [[["global", "local"], 1]],   # (GPT-Neo-specific) global and local attention 
-    num_heads               = 4,                            # attention heads
-    window_size             = 256,                          # (GPT-Neo-specific) for local attention 
-    intermediate_size       = 1024,                         # size of 'up-projection' layer in FFN
+    num_layers              :int = search(2,3)              # number of transformer blocks
+    attention_types         :Any = search([[["global", "local"], 1]])    # (GPT-Neo-specific) global and local attention 
+    num_heads               :int = 4                             # attention heads
+    window_size             :int = 256                           # (GPT-Neo-specific) for local attention 
+    intermediate_size       :int = 1024                          # size of 'up-projection' layer in FFN
 
-    pad_token_id = 0,                   # need to specify this for tokenizer interop between models
+    # need to specify this for tokenizer interop between models
+    pad_token_id            :int = 0
 
-    def instantiate(self): 
-        return GPTNeoForCausalLM(GPTNeoConfig(**self.__dict__)), \
-            GPT2TokenizerFast.from_pretrained('10k-tok')
 
 @dataclass
 class Rob(GridSearch):
 
     # EMBEDDING PARAMETERS
-    vocab_size              = 10_000,
-    hidden_size        :int = search([256, 384, 512]),
+    vocab_size              :int = 10_000
+    hidden_size             :int = search(256, 384, 512)
     # we add 1 as RoBERTa uses a special position eearbedding for the padding token (zero vector)
-    max_position_embeddings = 512 + 1,
+    max_position_embeddings :int = 512 + 1
 
     # BLOCKS (of course naming is different in roberta :) )
-    num_hidden_layers  :int = search([2,3]),
-    num_attention_heads     = 4,
-    intermediate_size       = 1024,
+    num_hidden_layers       :int = search(2,3)
+    num_attention_heads     :int = 4
+    intermediate_size       :int = 1024
 
-    pad_token_id = 0,
+    pad_token_id            :int = 0
 
-    def instantiate(self):
-        return RobertaForMaskedLM(RobertaConfig(**self.__dict__)), \
-            RobertaTokenizerFast.from_pretrained('10k-tok')
 
 @dataclass 
 class Hyperparams(GridSearch):
 
     dataset                     = load_from_disk(f'./tokenized_dataset')
-    model           :GridSearch = search([g for g in Gpt()] + [r for r in Rob()])
+    model_config    :GridSearch = search(Gpt(), Rob())
 
     # TRAINING HYPERPARAMETERS 
     batch_size                  = 16 # TinyStories uses 80, but I am training locally on my poor M1 Air
     num_train_epochs            = 2  # TinyStories doesn't mention
     gradient_accumulation_steps = 16 # TinyStories uses 16
 
-    lr                   :float = search([5e-4, 1e-3])
+    lr                   :float = search(5e-4, 1e-3)
     _train_steps                = len(dataset) // (batch_size * gradient_accumulation_steps)
     eval_steps                  = _train_steps // 10 # evaluate every 10% of training steps
 
@@ -77,20 +83,37 @@ class Hyperparams(GridSearch):
     group                       = 'baseline' if not TEST else 'test'
 
     @property
-    def model_name(self) -> str: 
-        return '-'.join([
-            'GPT' if isinstance(self.model, GPTNeoForCausalLM) else 'BERT',
-            f'{self.model.num_parameters()//1e6:.1f}M',
-            f'{self.config.num_layers if isinstance(self.model, GPTNeoForCausalLM) else self.config.num_hidden_layers}L', 
-            f'{self.config.num_heads if isinstance(self.model, GPTNeoForCausalLM) else self.config.num_attention_heads}H', 
-            f'{self.config.hidden_size}C',
-            f'{self.config.intermediate_size}I',
-            f'{self.lr}lr'
-        ])
+    def tok(self):
+        ''' properties are computed upon accessing them as attributes (`params.tok`) '''
+        if not hasattr(self, '__tok'):
+            self.__tok = RobertaTokenizerFast.from_pretrained('10k-tok') \
+                if isinstance(self.model_config, Rob) else \
+                GPT2TokenizerFast.from_pretrained('10k-tok') 
+        return self.__tok
+
+    @property 
+    def model(self): 
+        if not hasattr(self, '__model'): 
+            self.__model = RobertaForMaskedLM(RobertaConfig(**self.model_config.__dict__)) \
+                if isinstance(self.model_config, Rob) else \
+                GPTNeoForCausalLM(GPTNeoConfig(**self.model_config.__dict__))
+        return self.__model
 
     @property 
     def output_dir(self) -> str:
         return os.path.join('models', self.group, self.model_name)
+
+    @property
+    def model_name(self) -> str: 
+        return '-'.join([
+            'GPT' if isinstance(self.model, GPTNeoForCausalLM) else 'BERT',
+            f'{self.model.num_parameters()//1e6:.1f}M',
+            f'{self.model_config.num_layers if isinstance(self.model, GPTNeoForCausalLM) else self.model_config.num_hidden_layers}L', 
+            f'{self.model_config.num_heads if isinstance(self.model, GPTNeoForCausalLM) else self.model_config.num_attention_heads}H', 
+            f'{self.model_config.hidden_size}C',
+            f'{self.model_config.intermediate_size}I',
+            f'{self.lr}lr'
+        ])
 
     @property
     def trainer(self) -> Trainer: 
@@ -109,32 +132,39 @@ class Hyperparams(GridSearch):
             gradient_accumulation_steps = self.gradient_accumulation_steps,
 
             evaluation_strategy = 'steps',
-            eval_steps          = self.eval_steps if not TEST else 50,
-            save_steps          = self.eval_steps if not TEST else 50,
+            eval_steps          = self.eval_steps if not TEST else 5,
+            save_steps          = self.eval_steps if not TEST else 5,
 
             logging_first_step  = True,
-            logging_steps       = 100 if not TEST else 25,
-            report_to           = 'wandb',
+            logging_steps       = 100 if not TEST else 1,
+            report_to           = 'wandb' if not TEST else 'none',
         )
-        model, tokenizer = self.model.instantiate()
+
+        model = self.model 
+        tokenizer = self.tok 
+        train_ds = self.dataset['train'] if not TEST else \
+            self.dataset['train'].select(range(self.batch_size*10))
+        eval_ds = self.dataset['validation'] if not TEST else \
+            self.dataset['validation'].select(range(self.batch_size*4)),
 
         trainer = Trainer(
 
-            model               = self.model, 
+            model               = model, 
             args                = training_args, 
 
-            train_dataset       = self.dataset['train'] if not TEST else self.dataset['train'][:100],
-            eval_dataset        = self.dataset['eval']  if not TEST else self.datset['eval'][:100],
-            data_collator       = DataCollatorForLanguageModeling(tokenizer, mlm=isinstance(model, RobertaForMaskedLM)),
+            train_dataset       = train_ds,
+            eval_dataset        = eval_ds,
+            data_collator       = DataCollatorForLanguageModeling(
+                tokenizer, mlm=isinstance(tokenizer, RobertaForMaskedLM)),
         )
 
         # print amount of training steps, and how often the model is evaluated
         print(f'''
         Retrieving Trainer for \033[1m{self.model_name}\033[0m ({model.num_parameters():,}M)
 
-            Training for {self.num_train_epochs} epochs, {len(self.dataset['train'])} samples
+            Training for {self.num_train_epochs} epochs, {len(train_ds)} samples
             {self.batch_size} batch size, {self.gradient_accumulation_steps} accumulation steps.
-            Evaluating every {self.eval_steps} steps, {len(self.dataset['eval'])} samples.
+            Evaluating every {self.eval_steps} steps, {len(eval_ds)} samples.
         ''')
 
         return trainer
@@ -149,10 +179,13 @@ def set_all_seeds(seed=42):
 
 def train(params: Hyperparams, index=0):
 
+    set_all_seeds()
     # this machine has 2 GPUs but it's faster to train models on a single GPU 
-    torch.cuda.set_device(index)
-
-    wandb.init(project='tiny-transformers', name=params.model_name, group=params.group, config=params.__dict__)
+    # torch.cuda.set_device(index % 2)
+    if not DEBUG:
+        wandb.init(project='tiny-transformers', name=params.model_name, group=params.group, config=params.__dict__)
+    else: 
+        print('\033[1mRUNNING IN DEBUG MODE \033[0m')
     trainer = params.trainer
     trainer.train()
 
@@ -161,16 +194,20 @@ def train(params: Hyperparams, index=0):
 
     del trainer
 
+    # TODO: EVALUATION
+
+    set_all_seeds()
+    # evaluate(h, i)
 
 from tqdm.contrib.concurrent import process_map
 
 if __name__ == '__main__':
     
-    for h in Hyperparams():
-        print(h)
+    params = Hyperparams()
+    print(params)
 
-#         # set_all_seeds()
-#         # train(h, i)
-#         # set_all_seeds()
-#         # evaluate(h, i)
+    # this will parallelise training across 4 CPUs
+    # note you still need to deal with allocating GPUs
+    # or fit multiple models on the same GPU. 
+    process_map(train, params, max_workers=4)
 

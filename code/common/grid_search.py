@@ -4,7 +4,7 @@ from functools import reduce
 from dataclasses import dataclass, field, Field
 from typing import Dict, List, Any, Iterator
 
-''' Copyright aral. This class is for 3.10 onwards as dataclasses decided to off themselves '''
+''' Copyright aral. This class is for 3.11 onwards as dataclasses decided to off themselves '''
 
 @dataclass 
 class Dimension: 
@@ -60,7 +60,8 @@ class GridSearch(Surface):
         ```python
         @dataclass
         class Params(GridSearch):
-            a = search(1,2,3)
+            a :int = search(1,2,3)
+            b :str = 'b'
         
         for param in Params(): ...
         ```
@@ -95,12 +96,17 @@ class GridSearch(Surface):
             ), 1)
 
     def __iter__(self) -> Iterator[Surface]:
+
         keys = self.__dimensions.keys()
         for i, instance in enumerate(product(*[v for v in self.__dimensions.values()])):
             point = self.__class__(**self.__static_points, **dict(zip(keys, instance)))
             
-            point.__class__.__name__ += f'-{i}' \
-                if not point.__class__.__name__.__contains__('-') else f'\b{i}'
+            if not point.__class__.__name__.__contains__('-'):
+                point.__class__.__name__ += f'-{i}' 
+            else: 
+                point.__class__.__name__ = \
+                    point.__class__.__name__.split('-')[0] + f'-{i}'
+
             yield point
 
     @property 
