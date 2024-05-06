@@ -70,7 +70,8 @@ In actuality, the RoBERTa authors set the padding token to `index 1`. Not sure w
 
 #### The Solution
 - For consistency with the TinyStories paper, let's use their tokenizer: `GPT2Tokenizer`. @Rafael, you should check which dataset this has been trained on. 
-- For interoperability with RoBERTa, let's set the padding token to `index 0`, swapping whatever item was in `0` with the default padding location in `GPT2Tokenizer`, which is the very last token. 
+- For interoperability with RoBERTa, let's set the padding token to `index 0` (see below).
 - As RoBERTa relies on the presence of the `<s>`, `</s>`, and `<mask>` special tokens, let's make sure we add these into the tokenizer as well. There is also the `<unk>` token for representing unknown characters, which we need to add as well. 
-	- `<s>`, `</s>`, and `<unk>` are placed at the start, at `index 1`, `index 2`, and `index 3`. The existing tokens at these locations are moved to the end of the tokenizer, to positions `9996`, `9997`, and `9998` (replacing the tokens at those positions; and removing those last three merges from `merges.txt`)
+	- `<pad>`, `<s>`, `</s>`, and `<unk>` are placed at the start, at `index 0`, `index 1`, `index 2`, and `index 3`. The existing tokens at these locations are moved to the end of the tokenizer, to positions `9995`, `9996`, `9997`, and `9998` (replacing the tokens at those positions; and removing those last three merges from `merges.txt`)
 	- `<mask>` is placed at `9999`, also replacing the existing value at that location, as it is the very last token in the `RoBERTa` tokenizer too. 
+
