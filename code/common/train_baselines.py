@@ -1,10 +1,10 @@
-import os, sys, torch, wandb, numpy as np, random
+import os, sys, subprocess, torch, wandb, numpy as np, random
 
 # `python train_baselines.py debug` stops wandb sync and behaves like test
 # `python train_baselines.py test` uses smol dataset
 
-TEST = len(sys.argv) > 0 and sys.argv[1] == 'test'
-DEBUG = len(sys.argv) > 0 and sys.argv[1] == 'debug'
+TEST = len(sys.argv) > 1 and sys.argv[1] == 'test'
+DEBUG = len(sys.argv) > 1 and sys.argv[1] == 'debug'
 if DEBUG: TEST = True 
 else: wandb.login()
 
@@ -38,14 +38,21 @@ class Gpt(GridSearch):
 
     # BLOCKS (ATTN & FFN)
     num_layers              :int = search(2,3)              # number of transformer blocks
-    attention_types         :Any = search([[["global", "local"], 1]])    # (GPT-Neo-specific) global and local attention 
-    num_heads               :int = 4                             # attention heads
-    window_size             :int = 256                           # (GPT-Neo-specific) for local attention 
-    intermediate_size       :int = 1024                          # size of 'up-projection' layer in FFN
+    attention_types         :int = None                     # (GPT-Neo-specific) global and local attention 
+    num_heads               :int = 4                        # attention heads
+    window_size             :int = 256                      # (GPT-Neo-specific) for local attention 
+    intermediate_size       :int = 1024                     # size of 'up-projection' layer in FFN
 
     # need to specify this for tokenizer interop between models
     pad_token_id            :int = 0
 
+    def __post_init__(self): 
+        # we need this for the values that depend on searched values in our config 
+
+        # first make sure we're in an instantiated (iterated) object 
+        if type(self.num_layers) is int:
+            layers = ['global', 'local']* (self.num_layers//2 + 1)
+            self.attention_types = [[layers[:self.num_layers], 1]]
 
 @dataclass
 class Rob(GridSearch):
@@ -68,19 +75,22 @@ class Rob(GridSearch):
 class Hyperparams(GridSearch):
 
     dataset                     = load_from_disk(f'./tokenized_dataset')
-    model_config    :GridSearch = search(Gpt(), Rob())
+    # model_config    :GridSearch = search(Gpt(), Rob())
+    model_config    :GridSearch = search(Gpt())
+    # model_config    :GridSearch = search(Rob())
 
     # TRAINING HYPERPARAMETERS 
     batch_size                  = 16 # TinyStories uses 80, but I am training locally on my poor M1 Air
-    num_train_epochs            = 2  # TinyStories doesn't mention
+    num_train_epochs            = 1  # TinyStories doesn't mention
     gradient_accumulation_steps = 16 # TinyStories uses 16
 
-    lr                   :float = search(5e-4, 1e-3)
-    _train_steps                = len(dataset) // (batch_size * gradient_accumulation_steps)
+    lr                   :float = search(8e-4, 1e-3, 2e-3)
+    _train_steps                = len(dataset['train']) // (batch_size * gradient_accumulation_steps)
     eval_steps                  = _train_steps // 10 # evaluate every 10% of training steps
 
-    # WANDB GROUP
-    group                       = 'baseline' if not TEST else 'test'
+    # WANDB INFO
+    project                     = 'baselines' 
+    entity                      = 'tiny-transformers' 
 
     @property
     def tok(self):
@@ -115,6 +125,12 @@ class Hyperparams(GridSearch):
             f'{self.lr}lr'
         ])
 
+    @property 
+    def model_type(self) -> str: 
+        model_type = 'GPT' if isinstance(self.model, GPTNeoForCausalLM) else 'RoBERTa'
+        if TEST: model_type += ' test'
+        return model_type
+
     @property
     def trainer(self) -> Trainer: 
 
@@ -123,7 +139,7 @@ class Hyperparams(GridSearch):
             seed       = 42,
             use_cpu    = False, # use GPU if available (not necessarily faster on laptops, but Apple's MPS have good support)
 
-            output_dir = os.path.join(self.output_dir, self.model_name),
+            output_dir = os.path.join(self.output_dir, 'checkpoints'),
 
             learning_rate               = self.lr,
             num_train_epochs            = self.num_train_epochs,
@@ -136,7 +152,7 @@ class Hyperparams(GridSearch):
             save_steps          = self.eval_steps if not TEST else 5,
 
             logging_first_step  = True,
-            logging_steps       = 100 if not TEST else 1,
+            logging_steps       = self.eval_steps if not TEST else 1,
             report_to           = 'wandb' if not TEST else 'none',
         )
 
@@ -145,7 +161,7 @@ class Hyperparams(GridSearch):
         train_ds = self.dataset['train'] if not TEST else \
             self.dataset['train'].select(range(self.batch_size*10))
         eval_ds = self.dataset['validation'] if not TEST else \
-            self.dataset['validation'].select(range(self.batch_size*4)),
+            self.dataset['validation'].select(range(self.batch_size*4))
 
         trainer = Trainer(
 
@@ -177,27 +193,40 @@ def set_all_seeds(seed=42):
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
 
-def train(params: Hyperparams, index=0):
+def train(params: Hyperparams):
 
     set_all_seeds()
     # this machine has 2 GPUs but it's faster to train models on a single GPU 
     # torch.cuda.set_device(index % 2)
     if not DEBUG:
-        wandb.init(project='tiny-transformers', name=params.model_name, group=params.group, config=params.__dict__)
-    else: 
-        print('\033[1mRUNNING IN DEBUG MODE \033[0m')
+        wandb.init(
+            entity=params.entity, project=params.project, 
+            group=params.model_type, name=params.model_name, 
+            config=params.__dict__)
+
+    else: print('\033[1mRUNNING IN DEBUG MODE \033[0m')
+
     trainer = params.trainer
     trainer.train()
 
-    save_dir = os.path.join('models', params.group, params.model_name)
-    trainer.save_model(save_dir)
+    trainer.save_model(params.output_dir)
 
+    # NOTE: this is where you *could* push your model to the hub;
+    # or do that later after you are certain it is solid 
+    # model.push_to_hub(save_dir)
+
+    del trainer.model
     del trainer
 
     # TODO: EVALUATION
-
     set_all_seeds()
+    subprocess.check_call()
+    subprocess.run(['./evaluate.sh', os.path.abspath(params.output_dir)], 
+                   capture_output=True)
     # evaluate(h, i)
+
+
+    wandb.finish()
 
 from tqdm.contrib.concurrent import process_map
 
@@ -209,5 +238,8 @@ if __name__ == '__main__':
     # this will parallelise training across 4 CPUs
     # note you still need to deal with allocating GPUs
     # or fit multiple models on the same GPU. 
-    process_map(train, params, max_workers=4)
+    # process_map(train, enumerate(params), max_workers=1)
+    for param in params:
+        train(param)
+
 
