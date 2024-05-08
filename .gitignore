@@ -3,3 +3,5 @@ keys.txt
 tokenized_dataset
 wandb
 models
+__pycache__
+*.log
