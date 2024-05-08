@@ -1,4 +1,5 @@
 import os, sys, subprocess, json
+from tqdm.contrib.concurrent import process_map
 
 TEST = len(sys.argv) > 1 and sys.argv[1] == 'test'
 DEBUG = len(sys.argv) > 1 and sys.argv[1] == 'debug'
@@ -19,12 +20,13 @@ TASKS = {
              "syntactic_category_lexical_content_the", "syntactic_category_relative_position"]
 }
 
-def evaluate(model_path): 
+def evaluate(model_path, cuda_index=0): 
     ''' run babylm pipeline, log training to a file '''
 
     with open(os.path.join(model_path, 'eval.log'), 'wb') as f:
 
-        process = subprocess.Popen(f'CUDA_VISIBLE_DEVICES=0 ./evaluate.sh {model_path}', 
+        cuda_index = cuda_index % 2
+        process = subprocess.Popen(f'CUDA_VISIBLE_DEVICES={cuda_index} ./evaluate.sh {model_path}', 
                 stdout=subprocess.PIPE, shell=True)
 
         for c in iter(lambda: process.stdout.read(1), b''):
@@ -34,14 +36,27 @@ def evaluate(model_path):
         process.wait() # wait until the entire eval is done
 
 
-def eval_and_aggregate(model):
+def eval_and_aggregate(model, no_train=False, index=0) -> dict:
     ''' run evaluation, find all scores in the model dir, and aggregate them according 
-        to how the BLiMP/GLUE/Super(GLUE)/MSGS papers describe. '''
+        to how the BLiMP/GLUE/Super(GLUE)/MSGS papers describe. 
+        Then, return all (relevant) scores as a big dic'''
 
     model_path = os.path.join(os.path.abspath(MODEL_DIR), model)
 
-    # TODO: uncomment
-    # evaluate(model_path)
+    # if the model_path contains finetune and zerosho, set no_train to true 
+    if all(os.path.exists(os.path.join(model_path, x)) for x in ['finetune', 'zeroshot']):
+        print(f'\033[1m{model} has already been trained; skipping training\033[0m')
+        no_train = True
+
+    # Can be useful if you've already fine-tuned some models and don't want to do that again
+    if not no_train: 
+        # if config.json is not in model_path, break from this function 
+        if not os.path.exists(os.path.join(model_path, 'config.json')):
+            raise FileNotFoundError(f'config.json not found in {model_path}')
+
+        evaluate(model_path, cuda_index=index)
+
+    # assume you have the scores computed in the model's directory
     blimp, supplement, glue, msgs = get_scores(model_path)
 
     blimp_sub_avg = sum(task['eval_accuracy'] for task in blimp.values()) / len(blimp)
@@ -72,6 +87,24 @@ def eval_and_aggregate(model):
         BLiMP: {blimp_avg*100:.1f}%  \t ({blimp_sub_avg:.1f} base, {supplement_avg:.1f} supplement)
         GLUE : {glue_avg*100:.1f}    \t (multiplied by 100)
         ''')
+
+    return {
+        # Aggregated (mostly averaged) score
+        'blimp_avg': blimp_avg,
+        'glue_avg': glue_avg,
+
+        # Score per component; not sure if it's normal to report these separate or whether it
+        # was just a thing for the BabyLM challenge.
+        'base_avg': blimp_sub_avg,
+        'supp_avg': supplement_avg,
+
+        # Individual task scores, combined using the correct metrics. 
+        # NOTE: except for MultiRC, for which we need to compute EM (simple in practice, im out of time tho)
+        **blimp, 
+        **supplement,
+        **glue_metrics,
+    }
+
 
 
 def get_scores(model_path) -> tuple[dict, dict, dict[str, dict], dict[str, dict]]:
@@ -112,6 +145,10 @@ def get_scores(model_path) -> tuple[dict, dict, dict[str, dict], dict[str, dict]
 
     return blimp, supplement, glue, msgs
 
+# multiprocessing forces you to define functions at the top level
+def multiprocess(args):
+    i, model = args
+    return eval_and_aggregate(model, index=i)
 
 if __name__ == '__main__':
 
@@ -121,6 +158,4 @@ if __name__ == '__main__':
 
     MODEL_DIR = 'models/baseline'
 
-    for model in os.listdir(MODEL_DIR):
-        eval_and_aggregate(model)
-        break
+    process_map(multiprocess, enumerate(os.listdir(MODEL_DIR)), max_workers=4)
