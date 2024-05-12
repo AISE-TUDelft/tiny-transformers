@@ -1,9 +1,13 @@
-import os, sys, subprocess, json
+import os, sys, subprocess, json, torch, wandb, pandas as pd 
 from tqdm.contrib.concurrent import process_map
 
 TEST = len(sys.argv) > 1 and sys.argv[1] == 'test'
 DEBUG = len(sys.argv) > 1 and sys.argv[1] == 'debug'
 if DEBUG: TEST = True 
+
+MODEL_DIR       = 'models/baseline'
+NO_INFERENCE    = False 
+N_CUDA_DEVICES  = torch.cuda.device_count()
 
 TASKS = {
     "glue": ["cola", "sst2", "mrpc", "qqp", "mnli", "mnli-mm", "qnli", "rte",
@@ -23,9 +27,10 @@ TASKS = {
 def evaluate(model_path, cuda_index=0): 
     ''' run babylm pipeline, log training to a file '''
 
-    with open(os.path.join(model_path, 'eval.log'), 'wb') as f:
+    # open file in append mode 
+    with open(os.path.join(model_path, 'eval.log'), 'ab') as f:
 
-        cuda_index = cuda_index % 2
+        cuda_index = cuda_index % N_CUDA_DEVICES
         process = subprocess.Popen(f'CUDA_VISIBLE_DEVICES={cuda_index} ./evaluate.sh {model_path}', 
                 stdout=subprocess.PIPE, shell=True)
 
@@ -36,29 +41,45 @@ def evaluate(model_path, cuda_index=0):
         process.wait() # wait until the entire eval is done
 
 
-def eval_and_aggregate(model, no_train=False, index=0) -> dict:
+def eval_and_aggregate(kwargs) -> dict:
     ''' run evaluation, find all scores in the model dir, and aggregate them according 
         to how the BLiMP/GLUE/Super(GLUE)/MSGS papers describe. 
         Then, return all (relevant) scores as a big dic'''
 
+    model, index, no_train = kwargs['model'], kwargs['index'], kwargs['no_train']
     model_path = os.path.join(os.path.abspath(MODEL_DIR), model)
+
+    print(f'\033[1mEvaluating {model:40} on GPU {index % N_CUDA_DEVICES} \033[0m \t{"(no finetuning)" if no_train else ""}')
 
     # if the model_path contains finetune and zerosho, set no_train to true 
     if all(os.path.exists(os.path.join(model_path, x)) for x in ['finetune', 'zeroshot']):
-        print(f'\033[1m{model} has already been trained; skipping training\033[0m')
+        print(f'\t{model} has already been trained; skipping training')
         no_train = True
 
-    # Can be useful if you've already fine-tuned some models and don't want to do that again
+    # Skip inference if the user indicates so
     if not no_train: 
-        # if config.json is not in model_path, break from this function 
+        # Check if the model actually exists in the directory
         if not os.path.exists(os.path.join(model_path, 'config.json')):
-            raise FileNotFoundError(f'config.json not found in {model_path}')
+            print(f'\tconfig.json not found in {model_path}; skipping evaluation')
+            return {'model': model}
 
         evaluate(model_path, cuda_index=index)
 
-    # assume you have the scores computed in the model's directory
+    # Early exit if either the zeroshot or finetune scores are missing
+    if not os.path.exists(os.path.join(model_path, 'zeroshot')) \
+        or len(os.listdir(os.path.join(model_path, 'zeroshot'))) != len(TASKS['blimp']) + len(TASKS['supplement']):
+        print(f'\t{model} did not evaluate on all BLiMP tasks; skipping aggregation')
+        return {'model': model}
+
+    if not os.path.exists(os.path.join(model_path, 'finetune')) \
+        or len(os.listdir(os.path.join(model_path, 'finetune'))) != len(TASKS['glue']) + len(TASKS['msgs']):
+        print(f'\t{model} did not evaluate on all GLUE tasks; skipping aggregation')
+        return {'model': model}
+
+    # Get scores for every benchmark's subtasks
     blimp, supplement, glue, msgs = get_scores(model_path)
 
+    # Aggregate the scores according to the BLiMP/GLUE papers
     blimp_sub_avg = sum(task['eval_accuracy'] for task in blimp.values()) / len(blimp)
     supplement_avg = sum(task['eval_accuracy'] for task in supplement.values()) / len(supplement)
     blimp_avg = sum(task['eval_accuracy'] for task in [*blimp.values(), *supplement.values()]) / (len(blimp) + len(supplement))
@@ -89,6 +110,7 @@ def eval_and_aggregate(model, no_train=False, index=0) -> dict:
         ''')
 
     return {
+        'model': model, 
         # Aggregated (mostly averaged) score
         'blimp_avg': blimp_avg,
         'glue_avg': glue_avg,
@@ -104,7 +126,6 @@ def eval_and_aggregate(model, no_train=False, index=0) -> dict:
         **supplement,
         **glue_metrics,
     }
-
 
 
 def get_scores(model_path) -> tuple[dict, dict, dict[str, dict], dict[str, dict]]:
@@ -145,17 +166,59 @@ def get_scores(model_path) -> tuple[dict, dict, dict[str, dict], dict[str, dict]
 
     return blimp, supplement, glue, msgs
 
-# multiprocessing forces you to define functions at the top level
-def multiprocess(args):
-    i, model = args
-    return eval_and_aggregate(model, index=i)
+def add_to_wandb(result):
+    ''' Log results to wandb. For this you need to map the run name to its id 
+        in the table, by downloading name, id columns from wandb. '''
+    
+    # get the run ID from the model name
+    run_ids = pd.read_csv('run-ids.csv')
+    model = result['model']
+    run_id = run_ids[run_ids['Name'] == model]['ID'].values[0]
+
+    # resume the wandb run and log the result
+    wandb.init(
+        entity='tiny-transformers', project='baselines', id=run_id, resume='must'
+    )
+    wandb.log(result)
+    wandb.finish()
+
 
 if __name__ == '__main__':
+
+    # Evaluate on multiple GPUs, but without sharding models across GPUs.
 
     # check if the current conda env is named 'babylm'
     if not os.environ['CONDA_DEFAULT_ENV'] == 'babylm':
         print('\033[1m WARNING: You are not in an environment named babylm \033[0m')
 
-    MODEL_DIR = 'models/baseline'
+    # Create kwargs
+    models = [
+        {'index': 0, 'model': model, 'no_train': NO_INFERENCE}
+        for i, model in enumerate(sorted(os.listdir(MODEL_DIR)))
+    ]
 
-    process_map(multiprocess, enumerate(os.listdir(MODEL_DIR)), max_workers=4)
+    # do the actual multiprocessing
+    results = [eval_and_aggregate(model) for model in models]
+    # results = process_map(eval_and_aggregate, models, max_workers=4)
+
+    is_missing = lambda result: 'blimp_avg' not in result
+    missing = [r for r in results if is_missing(r)]
+    results = [r for r in results if not is_missing(r)]
+
+    # print a nice summary
+    for result in results:
+        model = result['model']
+        blimp_avg, glue_avg = result['blimp_avg'], result['glue_avg']
+        blimp_sub_avg, supplement_avg = result['base_avg'], result['supp_avg']
+
+        print(f'''
+            \033[1mFinal scores for {model} \033[0m
+            BLiMP: {blimp_avg*100:.1f}%  \t ({blimp_sub_avg:.1f} base, {supplement_avg:.1f} supplement)
+            GLUE : {glue_avg*100:.1f}    \t (multiplied by 100)
+        ''')
+
+    print(f'\033[1m{len(missing)} models in {MODEL_DIR} did not complete evaluation\033[0m')
+    for miss in missing: 
+        print(miss['model'])
+
+    for result in results: add_to_wandb(result)

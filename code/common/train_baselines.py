@@ -20,7 +20,8 @@ from transformers import (
 
 # cheeky library i wrote; feel free to use anything else as well. 
 from grid_search import GridSearch, search 
-from dataclasses import dataclass, field 
+from dataclasses import dataclass
+from eval_baselines import eval_and_aggregate
 
 @dataclass 
 class Gpt(GridSearch):
@@ -75,9 +76,7 @@ class Rob(GridSearch):
 class Hyperparams(GridSearch):
 
     dataset                     = load_from_disk(f'./tokenized_dataset')
-    # model_config    :GridSearch = search(Gpt(), Rob())
-    model_config    :GridSearch = search(Gpt())
-    # model_config    :GridSearch = search(Rob())
+    model_config    :GridSearch = search(Gpt(), Rob())
 
     # TRAINING HYPERPARAMETERS 
     batch_size                  = 16 # TinyStories uses 80, but I am training locally on my poor M1 Air
@@ -111,7 +110,9 @@ class Hyperparams(GridSearch):
 
     @property 
     def output_dir(self) -> str:
-        return os.path.join('models', self.group, self.model_name)
+        # TODO: revert
+        # return os.path.join('models', self.model_type, self.model_name)
+        return os.path.join('models', 'baseline', self.model_name)
 
     @property
     def model_name(self) -> str: 
@@ -128,7 +129,7 @@ class Hyperparams(GridSearch):
     @property 
     def model_type(self) -> str: 
         model_type = 'GPT' if isinstance(self.model, GPTNeoForCausalLM) else 'RoBERTa'
-        if TEST: model_type += ' test'
+        if TEST: model_type += '-TEST'
         return model_type
 
     @property
@@ -195,9 +196,13 @@ def set_all_seeds(seed=42):
 
 def train(params: Hyperparams):
 
+    # if output_dir exists, early exit if it contains a model.safetensors file 
+    if os.path.exists(params.output_dir) and \
+        os.path.exists(os.path.join(params.output_dir, 'model.safetensors')):
+            print(f'\033[1m{params.model_name} has already been trained; skipping training\033[0m')
+            return
+
     set_all_seeds()
-    # this machine has 2 GPUs but it's faster to train models on a single GPU 
-    # torch.cuda.set_device(index % 2)
     if not DEBUG:
         wandb.init(
             entity=params.entity, project=params.project, 
@@ -223,8 +228,10 @@ def train(params: Hyperparams):
     subprocess.check_call()
     subprocess.run(['./evaluate.sh', os.path.abspath(params.output_dir)], 
                    capture_output=True)
-    # evaluate(h, i)
-
+    
+    score = eval_and_aggregate({'model': params.model_name, 'index': 0, 'no_train': False})
+    wandb.log(score)
+    print(score)
 
     wandb.finish()
 
@@ -240,6 +247,7 @@ if __name__ == '__main__':
     # or fit multiple models on the same GPU. 
     # process_map(train, enumerate(params), max_workers=1)
     for param in params:
+        print(param)
         train(param)
 
 

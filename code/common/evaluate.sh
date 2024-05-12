@@ -1,13 +1,11 @@
 #!/bin/bash
 
+# NOTE: make sure you're in an environment with babylm dependencies installed.
+
 # take in one argument from command line, corresponding 
 # to the model directory
 model_dir=$1
 tok_files='10k-tok/*'
-
-# we assume you have an environment named `babylm` 
-# with all the packages, as described in `evaluate.ipynb`
-conda activate babylm 
 
 # copy the tokenizer to model_dir
 cp $tok_files $model_dir
