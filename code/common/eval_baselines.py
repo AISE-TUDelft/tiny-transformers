@@ -5,9 +5,10 @@ TEST = len(sys.argv) > 1 and sys.argv[1] == 'test'
 DEBUG = len(sys.argv) > 1 and sys.argv[1] == 'debug'
 if DEBUG: TEST = True 
 
-MODEL_DIR       = 'models/baseline'
+MODEL_DIR       = 'models'
 NO_INFERENCE    = False 
 N_CUDA_DEVICES  = torch.cuda.device_count()
+ENV_NAME        = 'babylm'
 
 TASKS = {
     "glue": ["cola", "sst2", "mrpc", "qqp", "mnli", "mnli-mm", "qnli", "rte",
@@ -30,9 +31,13 @@ def evaluate(model_path, cuda_index=0):
     # open file in append mode 
     with open(os.path.join(model_path, 'eval.log'), 'ab') as f:
 
-        cuda_index = cuda_index % N_CUDA_DEVICES
-        process = subprocess.Popen(f'CUDA_VISIBLE_DEVICES={cuda_index} ./evaluate.sh {model_path}', 
-                stdout=subprocess.PIPE, shell=True)
+        # TODO: revert
+        # cuda_index = cuda_index % N_CUDA_DEVICES
+        cuda_index = 1
+        process = subprocess.Popen(
+            f'CUDA_VISIBLE_DEVICES={cuda_index} conda run -n {ENV_NAME} ./evaluate.sh {model_path}', 
+            stdout=subprocess.PIPE, shell=True
+        )
 
         for c in iter(lambda: process.stdout.read(1), b''):
             sys.stdout.buffer.write(c)
@@ -47,7 +52,8 @@ def eval_and_aggregate(kwargs) -> dict:
         Then, return all (relevant) scores as a big dic'''
 
     model, index, no_train = kwargs['model'], kwargs['index'], kwargs['no_train']
-    model_path = os.path.join(os.path.abspath(MODEL_DIR), model)
+    group = 'baseline' if not 'group' in kwargs else kwargs['group']
+    model_path = os.path.join(os.path.abspath(MODEL_DIR), group, model)
 
     print(f'\033[1mEvaluating {model:40} on GPU {index % N_CUDA_DEVICES} \033[0m \t{"(no finetuning)" if no_train else ""}')
 
