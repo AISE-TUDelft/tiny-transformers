@@ -116,11 +116,11 @@ class Hyperparams(GridSearch):
 
     @property 
     def output_dir(self) -> str:
-        return os.path.join('models', self.model_type, self.model_name)
+        return os.path.join('models', self.group, self.model_name)
 
     @property
     def model_name(self) -> str: 
-        return '-'.join([
+        name = '-'.join([
             'GPT' if isinstance(self.model, GPTNeoForCausalLM) else 'BERT',
             f'{self.model.num_parameters()//1e6:.1f}M',
             f'{self.model_config.num_layers if isinstance(self.model, GPTNeoForCausalLM) else self.model_config.num_hidden_layers}L', 
@@ -133,12 +133,8 @@ class Hyperparams(GridSearch):
             # first letter of padding_side
             f'{self.padding_side[0].upper()}P'
         ])
-
-    @property 
-    def model_type(self) -> str: 
-        model_type = 'GPT' if isinstance(self.model, GPTNeoForCausalLM) else 'RoBERTa'
-        if TEST: model_type += '-TEST'
-        return model_type
+        if TEST: name += '-TEST'
+        return name 
 
     @property
     def trainer(self) -> Trainer: 
@@ -204,41 +200,44 @@ def set_all_seeds(seed=42):
 
 def train(params: Hyperparams):
 
-    # # if output_dir exists, early exit if it contains a model.safetensors file 
-    # if os.path.exists(params.output_dir) and \
-    #     os.path.exists(os.path.join(params.output_dir, 'model.safetensors')):
-    #         print(f'\033[1m{params.model_name} has already been trained; skipping training\033[0m')
-    #         return
+    # if output_dir exists, early exit if it contains a model.safetensors file 
+    if os.path.exists(params.output_dir) and \
+        os.path.exists(os.path.join(params.output_dir, 'model.safetensors')):
+            print(f'\033[1m{params.model_name} has already been trained; skipping training\033[0m')
+            return
 
-    # set_all_seeds()
-    # if not DEBUG:
-    #     wandb.init(
-    #         entity=params.entity, project=params.project, 
-    #         group=params.group, name=params.model_name, 
-    #         config=params.__dict__)
+    set_all_seeds()
+    run_id = None
+    if not DEBUG:
+        run = wandb.init(
+            entity=params.entity, project=params.project, 
+            group=params.group, name=params.model_name, 
+            config=params.__dict__)
+        run_id = run.id
 
-    # else: print('\033[1mRUNNING IN DEBUG MODE \033[0m')
+    else: print('\033[1mRUNNING IN DEBUG MODE \033[0m')
 
-    # trainer = params.trainer
-    # trainer.train()
+    trainer = params.trainer
+    trainer.train()
 
-    # trainer.save_model(params.output_dir)
+    trainer.save_model(params.output_dir)
 
-    # # NOTE: this is where you *could* push your model to the hub;
-    # # or do that later after you are certain it is solid 
-    # # model.push_to_hub(save_dir)
+    # NOTE: this is where you *could* push your model to the hub;
+    # or do that later after you are certain it is solid 
+    # model.push_to_hub(save_dir)
 
-    # del trainer.model
-    # del trainer
+    del trainer.model
+    del trainer
 
-    # TODO: EVALUATION
     set_all_seeds()
     score = eval_and_aggregate(
         {'model': params.model_name, 'group': params.group, 'index': 0, 'no_train': False}
     )
-    wandb.log(score)
     print(score)
 
+    # we need to reinitialise as the babylm eval pipeline inits a whole bunch of runs
+    wandb.init(entity=params.entity, project=params.project, id=run_id, resume='must')
+    wandb.log(score)
     wandb.finish()
 
 from tqdm.contrib.concurrent import process_map

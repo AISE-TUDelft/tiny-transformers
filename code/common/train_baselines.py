@@ -246,6 +246,7 @@ if __name__ == '__main__':
     # note you still need to deal with allocating GPUs
     # or fit multiple models on the same GPU. 
     # process_map(train, enumerate(params), max_workers=1)
+
     for param in params:
         print(param)
         train(param)
