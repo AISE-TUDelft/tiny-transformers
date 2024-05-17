@@ -6,7 +6,6 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-from PE import RoPEEmbeddings
 
 class InfiniAttention(nn.Module):
     def __init__(self, config, attention_type):
@@ -39,7 +38,7 @@ class InfiniAttention(nn.Module):
                 f" {self.num_heads})."
             )
         
-        self.position_embedder = RoPEEmbeddings(dim=self.head_dim, seq_len=max_positions)
+
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
@@ -47,11 +46,11 @@ class InfiniAttention(nn.Module):
         self.ELU = nn.ELU()
         self.betas = nn.Parameter(torch.randn(1, self.num_heads, 1, 1))
         # needs to become num_heads, head_dim, head_dim
-        self.register_buffer("mem", torch.zeros((self.num_heads,self.head_dim, self.head_dim)))
-        # self.register_buffer("mem", torch.zeros((self.embed_dim, self.embed_dim)))
+        # self.register_buffer("mem", torch.zeros((self.num_heads,self.head_dim, self.head_dim)))
+        self.mem = torch.zeros((self.num_heads,self.head_dim, self.head_dim))
+        self.z = torch.zeros((self.num_heads, self.head_dim, 1))
         # needs to become num_heads, head_dim, 1
-        self.register_buffer("z", torch.zeros((self.num_heads, self.head_dim, 1)))
-        # self.register_buffer("z", torch.zeros((self.embed_dim, 1)))
+        # self.register_buffer("z", torch.zeros((self.num_heads, self.head_dim, 1)))
 
 
     def _split_heads(self, tensor, num_heads, attn_head_size):
@@ -78,11 +77,12 @@ class InfiniAttention(nn.Module):
         # We introduce our non-linearity
         sigma_q = self.ELU(query) + 1.0
         sigma_k = self.ELU(key) + 1.0
-        print("memory before the split", mem.size())
-        print("z before the split", z.size())
+
+        mem = mem.detach()
+        z = z.detach()
+
         # We retrieve from memory before we add to it
         A_mem = ((torch.matmul(sigma_q, mem)) / ((torch.matmul(sigma_q, z)) + 1e-6))
-        print("A_mem size", A_mem.size())
 
         attn_weights = torch.matmul(query, key.transpose(-1, -2))
         query_length, key_length = query.size(-2), key.size(-2)
@@ -108,20 +108,17 @@ class InfiniAttention(nn.Module):
             attn_weights = attn_weights * head_mask
 
         attn_output = torch.matmul(attn_weights, value)
-        print("attention output size before thing", attn_output.size())
 
         attn_output = F.sigmoid(self.betas) * A_mem + (torch.ones(1, 4, 1, 1) - F.sigmoid(self.betas)) * attn_output
 
-        print("attention output size", attn_output.size())
         delta = torch.matmul(sigma_k, mem) / (torch.matmul(sigma_k, z) + 1e-6)
-        print("mem update", (torch.matmul(sigma_k.transpose(-2, -1), value - delta)).size())
-        mem = mem + torch.matmul(sigma_k.transpose(-2, -1), value - delta)
-        z = z + sigma_k.sum(dim=-2, keepdim=True)
-        print("z update", (sigma_k.sum(dim=-2, keepdim=True)).size())
 
-        print("z after the split", z.size())
-        print("memory after the split", mem.size())
+        # This is questionable, I'm not sure if it's correct to mean over the whole batch
+        mem = mem + torch.matmul(sigma_k.transpose(-2, -1), value - delta).mean(dim=0)
+        z_update = (sigma_k.sum(dim=2, keepdim=True)).mean(dim=0)
+        z_update = z_update.permute(0, 2, 1)
 
+        z = z + z_update
 
         return attn_output, attn_weights, mem, z
 
@@ -141,8 +138,6 @@ class InfiniAttention(nn.Module):
 
         mem = self.mem
         z = self.z
-        print("memory before the split", mem.size())
-        print("z before the split", z.size())
 
         query = self._split_heads(query, self.num_heads, self.head_dim)
         key = self._split_heads(key, self.num_heads, self.head_dim)
