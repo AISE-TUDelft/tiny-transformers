@@ -73,7 +73,7 @@ class GridSearch(Surface):
 
     def __str__(self) -> str: 
 
-        string = f'\n\033[95m{len(self):3}\033[0m \033[1m{self.__class__.__name__}:\033[0m'
+        string = f'\n\033[95m{len(self):3}\033[0m \033[3m{self.__class__.__name__}:\033[0m'
 
         max_k_len = max(map(len, self.__dict__.keys()))
         for k,v in self.__dict__.items(): 
@@ -81,7 +81,7 @@ class GridSearch(Surface):
             v_string = '\n    '.join(str(v).splitlines()) 
             n_combinations = f'\033[95m{len(v) if hasattr(v, "__len__") else 1}\033[0m'
             # string += f'\n  {n} \033[1m{k:s}\033[0m: [{v_string}]'
-            string += '\n  {} \033[3m{:{}s}\033[0m: [{}]'.format(
+            string += '\n  {} \033[1m{:{}s}\033[0m: [{}]'.format(
                 n_combinations, k, max_k_len, v_string
             )
 

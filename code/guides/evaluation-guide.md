@@ -106,6 +106,7 @@ conda activate babylm
 cd evaluation-pipeline 
 pip install -e '.[dev]'
 pip install torch 
+pip install wandb
 
 unzip filter_data.zip
 ```
