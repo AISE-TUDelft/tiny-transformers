@@ -62,14 +62,15 @@ This will add
 - Selecting text in a tmux window automatically copies it to your (local) clipboard. 
 - random errors (but non-breaking afaik) because I just created this repo, PRs are welcome!
 
-The new stuff may not be present in your first `bash` shell, but just run `bash` again. Why? I don't want to know – I leave you with this lovely diagram. 
+The new stuff requires you to restart your tmux server, so do that real quick and get used to some of the commands you'll use often. Additionally, the changes may not be present in your first `bash` shell, but just run `bash` again. Why? I don't want to know – I leave you with this lovely diagram. 
 
 ![](https://blog.flowblok.id.au/static/images/shell-startup.png)
 
 #### Containerising
-People often use `docker` as a development container. This makes it easy to develop while being certain you are not affecting anyone else on the server, as long as you set up your container correctly. I use a minimal `jupyter` container from `quay.io`:
+People often use `docker` as a development container. This makes it easy to develop while being certain you are not affecting anyone else on the server, as long as you set up your container correctly – I.e. mount only your home directory in the container, not the entire server. I use a minimal `jupyter` container from `quay.io`:
 
 ```sh
+# on ronaldo, at /home/aral
 docker run \
 	--name aral \          # name for the container
 	--user root \          # user in the container (root, i.e. su)
