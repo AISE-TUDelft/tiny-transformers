@@ -96,9 +96,9 @@ class Hyperparams(GridSearch):
     def tok(self):
         ''' properties are computed upon accessing them as attributes (`params.tok`) '''
         if not hasattr(self, '__tok'):
-            self.__tok = RobertaTokenizerFast.from_pretrained('10k-tok') \
+            self.__tok = RobertaTokenizerFast.from_pretrained('10k-tok-bpe') \
                 if isinstance(self.model_config, Rob) else \
-                GPT2TokenizerFast.from_pretrained('10k-tok') 
+                GPT2TokenizerFast.from_pretrained('10k-tok-bpe')
         return self.__tok
 
     @property 
