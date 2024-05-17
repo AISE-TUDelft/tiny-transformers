@@ -94,9 +94,9 @@ For now, some more handy `docker` commands:
 - Enter container with `docker exec -it <name> bash`. I.e. execute `bash` in the container `<name>` in `-it` interactive mode. 
 
 #### Getting to Work
-Okay, now assuming you have the above `docker` dev container running on `delftblue`, you can connect to it from VSCode as follows:
+Okay, now assuming you have the above `docker` dev container running on `ronaldo`, you can connect to it from VSCode as follows:
 
-- Install `Docker Dev Containers` from the Extension Marketplace.
+- Install `Docker Dev Containers` and `Remote Development (ssh)` from the Extension Marketplace.
 - In the command palette, select `Connect Current Window to Host`, and select `ronaldo` (if not in your `~/.ssh/config`, you have to type out its address)
 - Once connected, open the command palette again; select `Attach to Dev Container`, and connect to your container. 
 
