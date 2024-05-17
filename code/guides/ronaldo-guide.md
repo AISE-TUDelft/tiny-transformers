@@ -57,6 +57,7 @@ git clone https://github.com/Ar4l/dotfiles
 
 This will add 
 - add conda env and git branch to your prompt
+- A new command `nv`, to watch the GPU usage instead of being single-use (highlights changes in GPU usage by polling every 0.5s). 
 - allow you to navigate `tmux` with `C-b <hjkl>`, `vim`-style
 - a bunch of other things that you'd intuitively expect to work, but don't (e.g. scrolling in `tmux` windows without pressing `C-b [` every time). 
 - Selecting text in a tmux window automatically copies it to your (local) clipboard. 
