@@ -87,9 +87,11 @@ docker run \
 	quay.io/jupyter/minimal-notebook
 ```
 
-```
+I've annotated each flag above, but it may be easier to just copy the following equivalent command:
+
+```sh
 # on ronaldo, at /home/aral
-docker run --name aral --user root --rm --gpus '"device=0"' --shm-size=20g -d -v "${PWD}":/home/jovyan/work quay.io/jupyter/minimal-notebook
+docker run --name <YOUR_NAME> --user root --rm --gpus '"device=0"' --shm-size=20g -d -v "${PWD}":/home/jovyan/work quay.io/jupyter/minimal-notebook
 ```
 
 The `quay.io/jupyter/minimal-notebook` runs a jupyter server in the container. But, unlike on `delftblue`, you can actually connect to it with your IDE (explained below). Also, the `jovyan` name is presumably the person who created the container, don't worry about it – all you should know is your `pwd` is mounted in their `~/work` directory, in the container. 
