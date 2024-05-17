@@ -1,4 +1,4 @@
-import os, sys, subprocess, json, torch, wandb, pandas as pd, traceback
+import os, sys, subprocess, json, torch, wandb, pandas as pd, traceback, time
 from tqdm.contrib.concurrent import process_map
 
 
@@ -22,7 +22,7 @@ TASKS = {
              "syntactic_category_lexical_content_the", "syntactic_category_relative_position"]
 }
 
-def run_babylm_pipeline(model_path: str, cuda_index: int = 0, verbose=False): 
+def run_babylm_pipeline(model_path: str, cuda_index: int = 0, verbose=True): 
     ''' Run babylm pipeline, log training to a file `eval.log` under model_path 
         babylm creates `zeroshot` and `finetune` directories for the BLIMP and GLUE/MSGS tasks
 
@@ -47,7 +47,7 @@ def run_babylm_pipeline(model_path: str, cuda_index: int = 0, verbose=False):
 
     process = subprocess.Popen(
         command,
-        stdout=sys.stdout, 
+        stdout=sys.stdout if verbose else subprocess.PIPE, 
         # stderr=subprocess.STDOUT, 
         shell=True, 
         universal_newlines=True,
@@ -66,33 +66,33 @@ def is_evaluated(model_path, tasks=['zeroshot', 'finetune']):
         print(f'\t{model} did not evaluate on any BLiMP tasks')
         is_evaluated = False
 
-    # make sure all task directories exist, and that each task subdir contains `eval_results.json`
-    zeroshot_dirs = [f for f in os.listdir(os.path.join(model_path, 'zeroshot'))]
-    for task in TASKS['blimp'] + TASKS['supplement']:
-        if task not in zeroshot_dirs:
-            print(f'\t{model} did not evaluate on {task}')
-            is_evaluated = False
-        elif not os.path.exists(os.path.join(model_path, 'zeroshot', task, 'eval_results.json')):
-            print(f'\t{model} did not complete evaluation on {task}')
-            is_evaluated = False
+    else: # make sure all task directories exist, and that each task subdir contains `eval_results.json`
+        zeroshot_dirs = [f for f in os.listdir(os.path.join(model_path, 'zeroshot'))]
+        for task in TASKS['blimp'] + TASKS['supplement']:
+            if task not in zeroshot_dirs:
+                print(f'\t{model} did not evaluate on {task}')
+                is_evaluated = False
+            elif not os.path.exists(os.path.join(model_path, 'zeroshot', task, 'eval_results.json')):
+                print(f'\t{model} did not complete evaluation on {task}')
+                is_evaluated = False
 
     if not os.path.exists(os.path.join(model_path, 'finetune')):
         print(f'\t{model} did not evaluate on any GLUE tasks')
         is_evaluated = False
 
-    # make sure all task directories exist, and that each task subdir contains `all_results.json`
-    finetune_files = [f for f in os.listdir(os.path.join(model_path, 'finetune'))]
-    for task in TASKS['glue'] + TASKS['msgs']:
-        if task not in finetune_files:
-            print(f'\t{model} did not evaluate on {task}')
-            is_evaluated = False
-        elif not os.path.exists(os.path.join(model_path, 'finetune', task, 'all_results.json')):
-            print(f'\t{model} did not complete evaluation on {task}')
-            is_evaluated = False
+    else: # make sure all task directories exist, and that each task subdir contains `all_results.json`
+        finetune_files = [f for f in os.listdir(os.path.join(model_path, 'finetune'))]
+        for task in TASKS['glue'] + TASKS['msgs']:
+            if task not in finetune_files:
+                print(f'\t{model} did not evaluate on {task}')
+                is_evaluated = False
+            elif not os.path.exists(os.path.join(model_path, 'finetune', task, 'all_results.json')):
+                print(f'\t{model} did not complete evaluation on {task}')
+                is_evaluated = False
 
     return is_evaluated 
 
-def get_scores(model_path) -> tuple[dict, dict, dict[str, dict], dict[str, dict]]:
+def get_scores(model_path, verbose=True) -> tuple[dict, dict, dict[str, dict], dict[str, dict]]:
     ''' get the scores from the model's directory and create dictionaries 
         for each benchmark in the evaluation '''
 
@@ -116,22 +116,22 @@ def get_scores(model_path) -> tuple[dict, dict, dict[str, dict], dict[str, dict]
             elif task in TASKS['msgs']: msgs[task] = score
             else: raise ValueError(f"Invalid task: {task}!")
     
-    # print these babies
-    print(f'\n\033[1mScores found in {model_path}\033[0m')
-    for name, benchmark in [('BLiMP', blimp), ('Supp.', supplement), ('GLUE', glue), ('MSGS', msgs)]: 
+    if verbose: # print these babies
+        print(f'\n\033[1mScores found in {model_path}\033[0m')
+        for name, benchmark in [('BLiMP', blimp), ('Supp.', supplement), ('GLUE', glue), ('MSGS', msgs)]: 
 
-        print(f'\n\033[1m{name:>50s}  \tAcc.\t F1 \t MCC\033[0m')
-        for task, score in sorted(benchmark.items()):
+            print(f'\n\033[1m{name:>50s}  \tAcc.\t F1 \t MCC\033[0m')
+            for task, score in sorted(benchmark.items()):
 
-            acc = f'{score["eval_accuracy"]*100:.2f}%' if 'eval_accuracy' in score else '-'
-            f1 = f'{score["eval_f1"]:.2f}' if 'eval_f1' in score else '-'
-            mcc = f'{score["eval_mcc"]:.2f}' if 'eval_mcc' in score else '-'
+                acc = f'{score["eval_accuracy"]*100:.2f}%' if 'eval_accuracy' in score else '-'
+                f1 = f'{score["eval_f1"]:.2f}' if 'eval_f1' in score else '-'
+                mcc = f'{score["eval_mcc"]:.2f}' if 'eval_mcc' in score else '-'
 
-            print(f'{task:>50s}: \t{acc}\t {f1}\t {mcc}')
+                print(f'{task:>50s}: \t{acc}\t {f1}\t {mcc}')
 
     return blimp, supplement, glue, msgs
 
-def aggregate_scores(blimp, supplement, glue, msgs) -> dict:
+def aggregate_scores(blimp, supplement, glue, msgs, model) -> dict:
     ''' Aggregate the scores according to the BLiMP/GLUE papers '''
 
     blimp_sub_avg = sum(task['eval_accuracy'] for task in blimp.values()) / len(blimp)
@@ -199,7 +199,7 @@ def add_to_wandb(result):
     wandb.log(result)
     wandb.finish()
 
-def eval_and_aggregate(model_path: str, index: int = 0) -> dict:
+def eval_and_aggregate(model_path: str, index: int = 0, verbose=True) -> dict:
     ''' Run evaluation, find all scores in the model dir, and aggregate them according 
         to how the BLiMP/GLUE/Super(GLUE)/MSGS papers describe. 
         Then, return aggregated scores as a big dic
@@ -222,23 +222,29 @@ def eval_and_aggregate(model_path: str, index: int = 0) -> dict:
             raise FileNotFoundError(f'Model files not found in {model_path}')
 
         else: 
-            run_babylm_pipeline(model_path, cuda_index=index)
+            # t_0 = time.time()
+            run_babylm_pipeline(model_path, cuda_index=index, verbose=verbose)
             # double check that the evaluation actually worked
             if not is_evaluated(model_path):
                 raise FileNotFoundError(f'\033[1;31mEvaluation failed; skipping aggregation\033[0m (check eval.log in {model_path})')
+            # time_taken = time.time() - t_0
 
         # Get raw scores for every benchmark's subtasks
-        blimp, supplement, glue, msgs = get_scores(model_path)
+        blimp, supplement, glue, msgs = get_scores(model_path, verbose=verbose)
 
         # aggregate by selecting the correct metric for each task, and compute task-averages
-        result : dict = aggregate_scores(blimp, supplement, glue, msgs)
+        result : dict = aggregate_scores(blimp, supplement, glue, msgs, model=model)
+        # result.update({'eval_time': time_taken})
 
         return result 
     
     except Exception as e:
         print(f'\t\033[1;31mError in {model_path}:\033[0m\n')
         traceback.print_exc()
-        return {'model': model_path}
+        return {'model': model_path, 'error': e}
+
+def eval_multiprocess(kwargs: dict):
+    return eval_and_aggregate(**kwargs)
 
 if __name__ == '__main__':
     ''' Evaluate on multiple GPUs, but without sharding models across GPUs. '''
@@ -247,36 +253,34 @@ if __name__ == '__main__':
     models : list[dict] = [ 
         {
             'model_path': os.path.join(os.path.abspath(MODEL_DIR), model),
-            'index'     : i % N_CUDA_DEVICES, 
+            # 'index'     : i % N_CUDA_DEVICES, 
+            'index'     : 1, 
+            'verbose'   : False,
         } for i, model in 
-            enumerate(sorted(os.listdir(MODEL_DIR)))
+            enumerate(reversed(sorted(os.listdir(MODEL_DIR))))
     ]
 
     # evaluate and aggregate scores for all models 
-    results = [eval_and_aggregate(**model) for model in models[:1]]
+    results = [eval_and_aggregate(**model) for model in models]
     # you can try multiprocessing, but babylm is giving me some errors 
     # you'll also need to unpack the kwargs into tuples for process_map to work 
-    # results = process_map(eval_and_aggregate, models, max_workers=4)
-
-    is_missing = lambda result: len(result) == 1 
-
-    missing = [r for r in results if is_missing(r)]
-    results = [r for r in results if not is_missing(r)]
+    # results = process_map(eval_multiprocess, models, max_workers=2)
 
     # print a nice summary
+    is_missing = lambda result: len(result) <= 2 
+    missing = [r for r in results if is_missing(r)]
+    results = sorted([r for r in results if not is_missing(r)], key=lambda r: r['blimp_avg'])
+
+    print(f'\033[1mFinal Scores\n{"Model":>50s}  \tBLiMP\t GLUE\033[0m')
     for result in results:
         model = result['model']
         blimp_avg, glue_avg = result['blimp_avg'], result['glue_avg']
         blimp_sub_avg, supplement_avg = result['base_avg'], result['supp_avg']
 
-        print(f'''
-            \033[1mFinal scores for {model} \033[0m
-            BLiMP: {blimp_avg*100:.1f}%  \t ({blimp_sub_avg:.1f} base, {supplement_avg:.1f} supplement)
-            GLUE : {glue_avg*100:.1f}    \t (multiplied by 100)
-        ''')
+        print(f'{model:>50s}  \t{blimp_avg*100:.1f}%\t {glue_avg*100:.1f}')
 
     print(f'\n\n\033[1m{len(missing)} models in {MODEL_DIR} did not complete evaluation\033[0m')
     for miss in missing: 
-        print(miss['model'])
+        print(f'{miss["model"]} \n{miss["error"]}')
 
     # for result in results: add_to_wandb(result)
