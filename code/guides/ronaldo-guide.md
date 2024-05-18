@@ -12,7 +12,7 @@ Ronaldo has the following hardware:
 - 2x NVidia 3080 GPU (please don't use both at once, 5+ people need to share them).
   See specs & usage with `nvidia-smi`
 - 128 CPU cores (please don't use all at once; start with like `20`).
-  See specs with `lscpu`.
+  See specs with `lscpu`, usage with `htop`
 
 #### Connecting
 I've set up my local `~/.ssh/config` as follows to connect.
