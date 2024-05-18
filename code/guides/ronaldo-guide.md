@@ -1,6 +1,6 @@
 ## Ronaldo Guide
 
-Ronaldo is a shared server among the SERG (Software Engineering Research Group). While it is often available, you need to be careful to not `rm -rf /` or do anything crazy that may affect the others relying on this server. 
+Ronaldo is a shared server among the SERG (Software Engineering Research Group). While it is often available, you need to be careful to not `rm -rf /` or do anything crazy that may affect the others relying on this server. To avoid breaking things, we work in `docker` containers to not affect any others on the server; while still allowing a maximal degree of flexibility.
 
 > This guide explains my `ronaldo` workflow. Specifically: 
 > 1. How to connect via `ssh`. 
