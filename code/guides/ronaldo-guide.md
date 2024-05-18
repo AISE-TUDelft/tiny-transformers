@@ -1,5 +1,4 @@
 ## Ronaldo Guide
-
 Ronaldo is a shared server among the SERG (Software Engineering Research Group). While it is often available, you need to be careful to not `rm -rf /` or do anything crazy that may affect the others relying on this server. To avoid breaking things, we work in `docker` containers to not affect any others on the server; while still allowing a maximal degree of flexibility.
 
 > This guide explains my `ronaldo` workflow. Specifically: 
@@ -53,6 +52,9 @@ tmux attach -t aral  # enter the `aral` server
 # in your ~ directory
 git clone https://github.com/Ar4l/dotfiles 
 ./dotfiles/setup.sh
+
+# you may need to re-start your shell
+exec bash 
 ```
 
 This will add 
@@ -71,27 +73,24 @@ The new stuff requires you to restart your tmux server, so do that real quick an
 People often use `docker` as a development container. This makes it easy to develop while being certain you are not affecting anyone else on the server, as long as you set up your container correctly – I.e. mount only your home directory in the container, not the entire server. I use a minimal `jupyter` container from `quay.io`:
 
 ```sh
-# on ronaldo, at /home/aral
-docker run \
-	--name aral \          # name for the container
-	--user root \          # user in the container (root, i.e. su)
-	--rm \                 # deletes container after you shut it down
-	--gpus '"device=0"' \  # which gpus to use (set to 'all' for 2 GPUs)
-	--shm-size=20g \
-	-d \                   # run container in background (detach)
-
-	# mount cwd into container's /home/jovyan/work
-	-v "${PWD}":/home/jovyan/work \
-
-	# container to use
-	quay.io/jupyter/minimal-notebook
+# on ronaldo, at /home/aral (~)
+docker run --name <YOUR_NAME> --user root --rm --gpus '"device=0"' --shm-size=20g -d -v "${PWD}":/home/jovyan/work quay.io/jupyter/minimal-notebook
 ```
 
-I've annotated each flag above, but it may be easier to just copy the following equivalent command:
+Let me explain what each flag does: 
 
 ```sh
-# on ronaldo, at /home/aral
-docker run --name <YOUR_NAME> --user root --rm --gpus '"device=0"' --shm-size=20g -d -v "${PWD}":/home/jovyan/work quay.io/jupyter/minimal-notebook
+--name aral           # name for the container
+--user root           # user in the container (root, i.e. su)
+--rm                  # deletes container after you shut it down
+--gpus '"device=0"'   # which gpus to use (set to 'all' for 2 GPUs)
+--shm-size=20g 
+-d                    # run container in background (detach)
+
+# mount cwd into container's /home/jovyan/work
+-v "${PWD}":/home/jovyan/work 
+
+quay.io/jupyter/minimal-notebook # container to use
 ```
 
 The `quay.io/jupyter/minimal-notebook` runs a jupyter server in the container. But, unlike on `delftblue`, you can actually connect to it with your IDE (explained below). Also, the `jovyan` name is presumably the person who created the container, don't worry about it – all you should know is your `pwd` is mounted in their `~/work` directory, in the container. 
@@ -109,4 +108,4 @@ Okay, now assuming you have the above `docker` dev container running on `ronaldo
 - In the command palette, select `Connect Current Window to Host`, and select `ronaldo` (if not in your `~/.ssh/config`, you have to type out its address)
 - Once connected, open the command palette again; select `Attach to Dev Container`, and connect to your container. 
 
-That's it! You should now be able to work on `ronaldo`, via VSCode, as if it is your local computer. 
+That's it! You should now be able to work on `ronaldo`, via VSCode, as if it is your local computer.
