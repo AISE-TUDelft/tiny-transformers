@@ -3,15 +3,16 @@
 # 
 # This script shows how to pre-train both models. I put them in one notebook because the majority of the code is shared; but you may want to separate the logic per model. 
 
+# %%
+# %pip install torch wandb transformers[torch] datasets tqdm 
+%load_ext autoreload
+%autoreload 2 
 
 # %%
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"  # or "0,1" for multiple GPUs
-from typing import Optional, Tuple
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # or "0,1" for multiple GPUs
+
 import wandb; wandb.login()
-import torch
-import torch.nn.functional as F
-import torch.nn as nn
 from transformers import (
     RobertaForMaskedLM, RobertaConfig, RobertaTokenizerFast,
     GPTNeoForCausalLM, GPTNeoConfig, GPT2TokenizerFast
@@ -44,7 +45,6 @@ config_gpt = dict(
     intermediate_size   = 1024,                 # size of 'up-projection' layer in FFN
 
     pad_token_id = 0,           # need to specify this for tokenizer interop between models
-    segment_len = 16,           # (InfiniAttention) 
 )
 
 config_rob = dict(
@@ -67,20 +67,9 @@ config_gpt = GPTNeoConfig(**config_gpt)
 config_rob = RobertaConfig(**config_rob)
 
 # %%
-from selfattention import InfiniAttention
-class InfiniAttentionGPTNeoForCausalLM(GPTNeoForCausalLM):
-    def __init__(self, config):
-        super().__init__(config)
-        # Assuming attention types are specified in config.attention_layers
-        # Replace the standard attention with the specified type
-        for block in self.transformer.h:
-            block.attn.attention = InfiniAttention(config_gpt, block.attn.attention_type)
-
-
-# %%
 # TODO: you should set all pytorch & huggingface seeds here as model initialisation depends on it
 
-gpt = InfiniAttentionGPTNeoForCausalLM(config=config_gpt)
+gpt = GPTNeoForCausalLM(config=config_gpt)
 rob = RobertaForMaskedLM(config=config_rob)
 
 print(f'''
@@ -149,7 +138,7 @@ tokenized_dataset['train'][0]['input_ids'][-10:]
 
 # %%
 from transformers import Trainer, TrainingArguments, DataCollatorForLanguageModeling
-model_name_for_save = ''
+
 def get_hyperparameters(model, dataset):
     ''' common hyperparameters to give to the trainer '''
 
@@ -164,15 +153,13 @@ def get_hyperparameters(model, dataset):
     # TODO: customise this name such that every model you train has a unique identifier!
     config      = model.config 
     model_name  = '-'.join([
-        'INFINI_GPT' if isinstance(model, InfiniAttentionGPTNeoForCausalLM) else (
-        'GPT' if isinstance(model, GPTNeoForCausalLM) else 'BERT'),
+        'GPT' if isinstance(model, GPTNeoForCausalLM) else 'BERT',
         f'{model.num_parameters()//1e6:.1f}M',
         f'{config.num_layers if isinstance(model, GPTNeoForCausalLM) else config.num_hidden_layers}L', 
         f'{config.num_heads if isinstance(model, GPTNeoForCausalLM) else config.num_attention_heads}H', 
         f'{config.hidden_size}C',
         f'{config.intermediate_size}I'
     ])
-    model_name_for_save = model_name
 
     _train_steps = len(dataset) // (batch_size * gradient_accumulation_steps)
     eval_steps = _train_steps // 10 # evaluate every 10% of training steps
@@ -198,7 +185,7 @@ def get_trainer(
     training_args = TrainingArguments(
 
         seed       = 42,
-        # use_cpu    = False, # use GPU if available (not necessarily faster on laptops, but Apple's MPS have good support)
+        use_cpu    = False, # use GPU if available (not necessarily faster on laptops, but Apple's MPS have good support)
 
         output_dir = os.path.join(output_dir, model_name),
 
@@ -269,12 +256,52 @@ len(train_dataset['text'][11]), len(train_dataset[11]['input_ids'])
 # do_train(trainer_rob, params_rob['model_name'], out_dir)
 
 # %%
-wandb.finish()
-
-# %%
 do_train(trainer_gpt, params_gpt['model_name'], out_dir) 
 
-# right after training
-trained_model = trainer_gpt.model
-torch.save(trained_model.state_dict(), f'./results/models_baseline/{model_name_for_save}/model_state.pt')
+# %% [markdown]
+# #### Using your Pre-Trained Model 
+# Try out your own model on some prompts!
+
+# %%
+# I made a small function for pretty printing into paragraphs with line wrapping for readability
+import textwrap 
+w = textwrap.TextWrapper(replace_whitespace=False, break_long_words=False, width=60, initial_indent='   ', subsequent_indent='  ')
+def see(text): print('\n\033[3m' + '\n\n'.join(['\n'.join(w.wrap(line))
+                 for line in text.splitlines() if line.strip() != '']) + '\033[0m\n')
+
+# %%
+from transformers import AutoTokenizer, AutoModelForCausalLM
+
+model_name = 'GPT-9.0M-2L-4H-516C-1024I'
+# model_name = 'BERT-9.0M-2L-4H-516C-1024I' # bert won't work for generation unless you fine-tune it for that task
+
+tokenizer = AutoTokenizer.from_pretrained('10k-tok')
+tokenizer.pad_token_id = tokenizer.eos_token_id
+model = AutoModelForCausalLM.from_pretrained(f'results/models_baseline/GPT-9.0M-2L-4H-516C-1024I')
+
+# %% [markdown]
+# #### Inference 
+# Let's generate a short story like the ones the model has been trained on! You'll notice that the prompt is surrounded by `<s>`, the begin-of-sequence (bos) token, and `</s>` end-of-sequence (eos) / separator (sep) token. This is from the BERT-style tokenisation, making it clear to the model where (one of several) input sequences ends. 
+
+# %%
+prompt = 'Once upon a time, there was a little girl called Greta Piiskop, who liked to'
+input_ids = tokenizer.encode(prompt, return_tensors='pt')
+
+output = model.generate(
+    input_ids,                              # input to the model
+    max_length=300,                         # maximum generation length
+    eos_token_id=tokenizer.eos_token_id,    # early stopping when eos_token is output
+
+    # num_beams=1,                            # number of beams to use in generation
+    temperature=1,
+)
+output_text = tokenizer.decode(output[0])
+
+# textwrap with indentation on every new paragraph
+see(output_text)
+output
+
+# %% [markdown]
+# Sounds like me after a few beers too many, but at least the grammar is (mostly) correct. The model also learns some basic reasoning-like associations like being 'so high' allows you to see 'the whole world'. 
+
 

@@ -73,18 +73,19 @@ class InfiniAttention(nn.Module):
         # Keep the attention weights computation in fp32 to avoid overflow issues
         query = query.to(torch.float32)
         key = key.to(torch.float32)
+        attn_weights = torch.matmul(query, key.transpose(-1, -2))
+        device = attn_weights.device
 
         # We introduce our non-linearity
         sigma_q = self.ELU(query) + 1.0
         sigma_k = self.ELU(key) + 1.0
 
-        mem = mem.detach()
-        z = z.detach()
+        mem = mem.detach().to(device)
+        z = z.detach().to(device)
 
         # We retrieve from memory before we add to it
         A_mem = ((torch.matmul(sigma_q, mem)) / ((torch.matmul(sigma_q, z)) + 1e-6))
 
-        attn_weights = torch.matmul(query, key.transpose(-1, -2))
         query_length, key_length = query.size(-2), key.size(-2)
         causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
         mask_value = torch.finfo(attn_weights.dtype).min
@@ -109,7 +110,7 @@ class InfiniAttention(nn.Module):
 
         attn_output = torch.matmul(attn_weights, value)
 
-        attn_output = F.sigmoid(self.betas) * A_mem + (torch.ones(1, 4, 1, 1) - F.sigmoid(self.betas)) * attn_output
+        attn_output = F.sigmoid(self.betas) * A_mem + (torch.ones(1, 4, 1, 1).to(device) - F.sigmoid(self.betas)) * attn_output
 
         delta = torch.matmul(sigma_k, mem) / (torch.matmul(sigma_k, z) + 1e-6)
 
