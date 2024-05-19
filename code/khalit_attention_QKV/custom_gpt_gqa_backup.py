@@ -4,13 +4,16 @@ from transformers import GPTNeoForCausalLM
 
 
 class GPTNeoGQASelfAttention(nn.Module):
-        def __init__(self, config, attention_type, num_kv_heads=None, kqv_size=None):
+        def __init__(self, config, attention_type, num_query_groups=None, kqv_size=None):
             super().__init__()
             # print("KQV_size: ", kqv_size)
             # print("Got to constructor")
             self.config = config
 
-            self.num_kv_heads = num_kv_heads
+            if num_query_groups is None:
+                self.num_query_groups = config.num_heads
+            else:
+                self.num_query_groups = num_query_groups
 
             if kqv_size is None:
                 self.kqv_size = config.hidden_size
@@ -71,125 +74,37 @@ class GPTNeoGQASelfAttention(nn.Module):
             return tensor.view(new_shape)
 
         def _attn(self, query, key, value, attention_mask=None, head_mask=None):
-            # calculates attention outputs and weights for one query
             # Keep the attention weights computation in fp32 to avoid overflow issues
+            # print("Got here _attn")
             query = query.to(torch.float32)
             key = key.to(torch.float32)
-            # print("_attn key shape: ", key.shape)
-            # print("_attn query shape: ", query.shape)
-            # transpose part is not changed, but dot product has to be edited
+
             attn_weights = torch.matmul(query, key.transpose(-1, -2))
-            # print("_attn weights torch.matmul(query, key.transpose(-1, -2)): ", attn_weights.shape)
 
-            # Transpose the key tensor along the last two dimensions
-            key_transposed = key.transpose(-1, -2)
-            # Initialize a list to collect the attention weights for each head
-            attn_weights_list = []
-
-            # Loop over each head (second dimension)
-            i, j = 0, 0
-            query_leftover = self.num_heads % self.num_kv_heads
-            queries_per_group = (self.num_heads // self.num_kv_heads) + 1 if query_leftover > 0 \
-                else self.num_heads // self.num_kv_heads
-            while i < key.shape[1] :
-                key_head = key_transposed[:, i, :, :]
-                for k in range (j, j + queries_per_group):
-                    query_head = query[:, k, :, :]
-                    attn_weight_qk = torch.matmul(query_head, key_head)
-                    attn_weights_list.append(attn_weight_qk)
-                j += queries_per_group
-                i += 1
-                query_leftover -= 1
-
-            attn_weights_decomposed = torch.stack(attn_weights_list, dim=1)
-
-            # attn_weights_list = []
-            # for head_idx in range(query.shape[1]):
-            #     # Extract the query and key for the current head
-            #     query_head = query[:, head_idx, :, :]  # Shape: [1, 12, 16]
-            #     key_transposed_head = key_transposed[:, head_idx, :, :]  # Shape: [1, 16, 12]
-            #
-            #     # Perform the dot product
-            #     attn_weight_head = torch.matmul(query_head, key_transposed_head)  # Shape: [1, 12, 12]
-            #     # Append the result to the list
-            #     attn_weights_list.append(attn_weight_head)
-            # # Concatenate the results along the head dimension (second dimension)
-            # attn_weights_decomposed = torch.stack(attn_weights_list, dim=1)  # Shape: [1, 4, 12, 12]
-            # assert torch.allclose(attn_weights_decomposed, attn_weights)
-
-            query_length, key_length = query.size(-2), key.size(-2)     # no need to change
+            query_length, key_length = query.size(-2), key.size(-2)
             causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
-            # mask_value = torch.finfo(attn_weights.dtype).min
-            # # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
-            # # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
-            # mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
-            # attn_weights = torch.where(causal_mask, attn_weights, mask_value)
-            #
-            # if attention_mask is not None:
-            #     # Apply the attention mask
-            #     attn_weights = attn_weights + attention_mask
-            #
-            # attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-            # attn_weights = attn_weights.to(value.dtype)
-            # attn_weights = self.attn_dropout(attn_weights)
-
-            mask_value = torch.finfo(attn_weights_decomposed.dtype).min
+            mask_value = torch.finfo(attn_weights.dtype).min
             # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
             # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
-            mask_value = torch.tensor(mask_value, dtype=attn_weights_decomposed.dtype).to(attn_weights_decomposed.device)
-            attn_weights_decomposed = torch.where(causal_mask, attn_weights_decomposed, mask_value)
+            mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
+            attn_weights = torch.where(causal_mask, attn_weights, mask_value)
 
             if attention_mask is not None:
                 # Apply the attention mask
-                attn_weights_decomposed = attn_weights_decomposed + attention_mask
+                attn_weights = attn_weights + attention_mask
 
-            attn_weights_decomposed = nn.functional.softmax(attn_weights_decomposed, dim=-1)
-            attn_weights_decomposed = attn_weights_decomposed.to(value.dtype)
-            attn_weights_decomposed = self.attn_dropout(attn_weights_decomposed)
+            attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+            attn_weights = attn_weights.to(value.dtype)
+            attn_weights = self.attn_dropout(attn_weights)
 
             # Mask heads if we want to
             if head_mask is not None:
-                attn_weights_decomposed = attn_weights_decomposed * head_mask
+                attn_weights = attn_weights * head_mask
 
-            # assert torch.allclose(attn_weights_decomposed, attn_weights)
-            # Initialize a list to collect the attention outputs for each head
-            attn_output_list = []
-            # Loop over each query head and apply the corresponding attention weights to the value heads
-            i, j = 0, 0
-            query_leftover = self.num_heads % self.num_kv_heads
-            while i < value.shape[1]:
-                value_head = value[:, i, :, :]
-                for k in range(j, j + queries_per_group):
-                    attn_weight_head = attn_weights_decomposed[:, k, :, :]
-                    attn_output_head = torch.matmul(attn_weight_head, value_head)
-                    attn_output_list.append(attn_output_head)
-                j += queries_per_group
-                i += 1
-                query_leftover -= 1
-            attn_output_decomposed = torch.stack(attn_output_list, dim=1)  # Shape: [1, 4, 12, 16]
-            # attn_output_list = []
-            # for head_idx in range(value.shape[1]):
-            #     # Determine which value head to use
-            #
-            #     # Extract the value for the current head
-            #     value_head = value[:, head_idx, :, :]  # Shape: [1, 12, 16]
-            #
-            #     # Extract the attention weights for the current head
-            #     attn_weight_head = attn_weights_decomposed[:, head_idx, :, :]  # Shape: [1, 12, 12]
-            #
-            #     # Perform the weighted sum (dot product with attention weights)
-            #     attn_output_head = torch.matmul(attn_weight_head, value_head)  # Shape: [1, 12, 16]
-            #
-            #     # Append the result to the list
-            #     attn_output_list.append(attn_output_head)
-            #
-            # # Concatenate the results along the head dimension (second dimension)
-            # attn_output_decomposed = torch.stack(attn_output_list, dim=1)  # Shape: [1, 4, 12, 16]
-            #
-            # attn_output = torch.matmul(attn_weights_decomposed, value)
-            # assert torch.allclose(attn_output_decomposed, attn_output)
+            attn_output = torch.matmul(attn_weights, value)
+            # print("Attn weight: ", attn_weights.size())
 
-            return attn_output_decomposed, attn_weights_decomposed
+            return attn_output, attn_weights
 
         def forward(
             self,
@@ -212,8 +127,8 @@ class GPTNeoGQASelfAttention(nn.Module):
             # print("value shape: ", value.shape)
 
             query = self._split_heads(query, self.num_heads, self.head_dim)
-            key = self._split_heads(key, self.num_kv_heads, self.head_dim)
-            value = self._split_heads(value, self.num_kv_heads, self.head_dim)
+            key = self._split_heads(key, self.num_heads, self.head_dim)
+            value = self._split_heads(value, self.num_heads, self.head_dim)
 
             if layer_past is not None:
                 # since cache is used, previous keys and values are extracted here
@@ -257,11 +172,11 @@ class CustomGPTNeoForCausalLM(GPTNeoForCausalLM):
     def set_kqv_size(self, kqv_size):
         self.kqv_size = kqv_size
 
-    def set_attention(self, num_key_value_heads=None):
+    def set_attention(self, num_query_groups=None):
         num_groups = None
-        if num_key_value_heads is None:
-            num_kv_heads = self.config.num_heads
+        if num_query_groups is None:
+            num_groups = self.config.num_heads
         else:
-            num_kv_heads = num_key_value_heads
+            num_groups = num_query_groups
         for block in self.transformer.h:
-            block.attn.attention = GPTNeoGQASelfAttention(self.config, block.attn.attention_type, num_kv_heads, self.kqv_size)
+            block.attn.attention = GPTNeoGQASelfAttention(self.config, block.attn.attention_type, num_groups, self.kqv_size)
