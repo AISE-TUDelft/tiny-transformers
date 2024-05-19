@@ -11,6 +11,7 @@ class GPTNeoGQASelfAttention(nn.Module):
             self.config = config
 
             self.num_kv_heads = num_kv_heads
+            self.gqa_factor = num_kv_heads / self.config.num_heads
 
             if kqv_size is None:
                 self.kqv_size = config.hidden_size
@@ -45,9 +46,15 @@ class GPTNeoGQASelfAttention(nn.Module):
                     f"embed_dim and kqv size must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
                     f" {self.num_heads})."
                 )
+            if self.kqv_size * self.gqa_factor != int(self.kqv_size * self.gqa_factor):
+                raise ValueError (
+                    f"kqv size must be divisible by number of kv heads (got `kqv_size`: {self.kqv_size} and `num_kv_heads`:"
+                    f" {self.num_kv_heads})."
+                )
 
-            self.k_proj = nn.Linear(self.embed_dim, self.kqv_size, bias=False)
-            self.v_proj = nn.Linear(self.embed_dim, self.kqv_size, bias=False)
+            self.k_proj = nn.Linear(self.embed_dim, int(self.kqv_size * self.gqa_factor), bias=False)
+            self.v_proj = nn.Linear(self.embed_dim, int(self.kqv_size * self.gqa_factor), bias=False)
+
             self.q_proj = nn.Linear(self.embed_dim, self.kqv_size, bias=False)
             self.out_proj = nn.Linear(self.kqv_size, self.embed_dim, bias=True)
 
