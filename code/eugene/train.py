@@ -14,13 +14,15 @@ import argparse
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="A script that takes a debug flag, a GPU number, a model type, and a sparsity type.")
-    parser.add_argument('--debug', action='store_true', help="Enable debug mode for detailed logging.")
-    parser.add_argument('--gpu_number', type=int, required=True, help="Specify the GPU number to use.")
-    parser.add_argument('--model_type', type=str, required=True, choices=['type1', 'type2', 'type3'],
+        description="Train and evaluate specified model")
+    parser.add_argument('--debug', action='store_true', help="Enable debug mode quick test (limits max steps).")
+    parser.add_argument('--gpu', type=int, required=True, help="Specify the GPU number to use.")
+    parser.add_argument('--model_type', type=str, required=True, choices=['gpt', 'roberta'],
                         help="Specify the model type.")
-    parser.add_argument('--sparsity_type', type=str, required=True, choices=['sparse', 'dense'],
+    parser.add_argument('--sparsity_type', type=str, required=True, choices=['baseline', 'moe', 'cnt', 'pkm'],
                         help="Specify the sparsity type.")
+    parser.add_argument('--sparsity_level', type=str, required=True, choices=['low', 'medium', 'high'],
+                        help="Specify the sparsity level.")
 
     args = parser.parse_args()
 
