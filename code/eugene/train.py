@@ -13,8 +13,7 @@ from sparse_gpt_neo import SparseGPTNeoForCausalLM
 from configuration_sparse_gpt_neo import SparseGPTNeoConfig
 from sparse_roberta import SparseRobertaForMaskedLM
 from configuration_sparse_roberta import SparseRobertaConfig
-from sparse_ffn.sparsity_types import SparsityType
-from common.eval_baselines import eval_and_aggregate
+#from common.eval_baselines import eval_and_aggregate
 import wandb
 
 
@@ -59,7 +58,7 @@ def load_tokenizer_and_model(model_type, sparsity_type, sparsity_level):
                 config_dict = json.load(config_file)
             config_gpt = SparseGPTNeoConfig(**config_dict)
             tok_gpt = get_tokenizer_for_config(GPT2TokenizerFast,config_gpt)
-            return tok_gpt, SparseGPTNeoConfig(config=config_gpt)
+            return tok_gpt, SparseGPTNeoForCausalLM(config=config_gpt)
 
     elif model_type == 'roberta':
         if sparsity_type == 'baseline':
@@ -96,11 +95,9 @@ def train(name, model, tokenizer, dataset, debug, gpu):
     batch_size = 80 if not debug else 8
     grad_accum_steps = 16
 
-    output_dir = 'models/eugene/'
+    output_dir = f'models/eugene/{name}'
 
-    if os.path.exists(output_dir) and os.path.exists(f"{output_dir}/{name}.safetensor"):
-        print(f'\033[1m{name} has already been trained; skipping training\033[0m')
-        return
+
 
     training_data = dataset['train'] if not debug else dataset['train'].select(range(batch_size*10))
     validation_data = dataset['validation'] if not debug else dataset['validation'].select(range(batch_size*4))
@@ -111,13 +108,13 @@ def train(name, model, tokenizer, dataset, debug, gpu):
         seed=123,
         use_cpu=False,
         learning_rate=lr,
-        output_dir=os.path.join(f'{output_dir}/checkpoints'),
+        output_dir=f'{output_dir}/checkpoints',
         num_train_epochs=num_epochs,
         per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=batch_size,
         gradient_accumulation_steps=grad_accum_steps,
 
-        evaluation_strategy='steps',
+        eval_strategy='steps',
         eval_steps=num_eval_steps if not debug else 5,
         save_steps=num_eval_steps if not debug else 5,
 
@@ -125,6 +122,7 @@ def train(name, model, tokenizer, dataset, debug, gpu):
         logging_steps=num_eval_steps if not debug else 1,
         report_to='wandb' if not debug else 'none',
     )
+
 
     trainer = Trainer(
 
@@ -137,6 +135,7 @@ def train(name, model, tokenizer, dataset, debug, gpu):
             tokenizer, mlm=isinstance(tokenizer, RobertaForMaskedLM)),
     )
 
+
     if not debug:
         model_type = 'gpt' if 'gpt' in name else 'roberta'
         with open('code/eugene/wandb_key.txt') as f:
@@ -148,18 +147,22 @@ def train(name, model, tokenizer, dataset, debug, gpu):
     else:
         print('\033[1mRUNNING IN DEBUG MODE \033[0m')
 
-    trainer.train()
+    if os.path.exists(output_dir) and os.path.exists(f"{output_dir}/model.safetensors"):
+        print(f'\033[1m{name} has already been trained; skipping pretraining\033[0m')
+    else:
+        trainer.train()
+        trainer.save_model(output_dir)
 
-    trainer.save_model(f'{output_dir}/{name}')
+    # evaluation, whose pipeline i dont have time figuring out at the moment
+    # set_seeds()
+    # score = eval_and_aggregate(model_path=output_dir, index=gpu)
 
-    set_seeds()
-    score = eval_and_aggregate(model_path=f'{output_dir}/{name}', index=gpu)
+    # if not debug:
+    #     wandb.log(score)
+    #     wandb.finish()
+    # print(score)
 
-    if not debug:
-        wandb.log(score)
-        wandb.finish()
-    print(score)
-
+    #
 
 
 
@@ -175,6 +178,8 @@ if __name__ == "__main__":
     parser.add_argument('--sparsity_level', type=str, required=True, choices=['low', 'medium', 'high'],
                         help="Specify the sparsity level.")
 
+    assert torch.cuda.is_available(), "no cuda"
+
     args = parser.parse_args()
 
     set_seeds()
@@ -184,3 +189,5 @@ if __name__ == "__main__":
     tokenizer, model = load_tokenizer_and_model(args.model_type, args.sparsity_type, args.sparsity_level)
     mode_name = get_model_name(args.model_type, args.sparsity_type, args.sparsity_level)
     train(mode_name, model, tokenizer, dataset, args.debug, args.gpu)
+
+    #file not found, and why did it not skip training?
