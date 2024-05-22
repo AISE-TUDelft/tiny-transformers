@@ -1,5 +1,5 @@
-from enum import Enum
-class SparsityType(Enum):
+from enum import IntEnum
+class SparsityType(IntEnum):
     MOE = 1
     CNT = 2
     PKM = 3

@@ -34,11 +34,11 @@ class Gpt(GridSearch):
 
     # EMBEDDING PARAMETERS
     vocab_size              :int = 10_000                   # number of tokens in the vocabulary 
-    hidden_size             :int = search(256, 384, 512)    # embedding size (vector length) of each token 
+    hidden_size             :int = 256                      # embedding size (vector length) of each token 
     max_position_embeddings :int = 512                      # maximum sequence length (context window)
 
     # BLOCKS (ATTN & FFN)
-    num_layers              :int = search(2,3)              # number of transformer blocks
+    num_layers              :int = 3                        # number of transformer blocks
     attention_types         :int = None                     # (GPT-Neo-specific) global and local attention 
     num_heads               :int = 4                        # attention heads
     window_size             :int = 256                      # (GPT-Neo-specific) for local attention 
@@ -60,12 +60,12 @@ class Rob(GridSearch):
 
     # EMBEDDING PARAMETERS
     vocab_size              :int = 10_000
-    hidden_size             :int = search(256, 384, 512)
+    hidden_size             :int = 256
     # we add 1 as RoBERTa uses a special position eearbedding for the padding token (zero vector)
     max_position_embeddings :int = 512 + 1
 
     # BLOCKS (of course naming is different in roberta :) )
-    num_hidden_layers       :int = search(2,3)
+    num_hidden_layers       :int = 3
     num_attention_heads     :int = 4
     intermediate_size       :int = 1024
 
@@ -77,6 +77,10 @@ class Hyperparams(GridSearch):
 
     dataset                     = load_from_disk(f'./tokenized_dataset')
     model_config    :GridSearch = search(Gpt(), Rob())
+
+    # TOKENIZER
+    padding_side           :str = search('right', 'left')
+    truncation_side        :str = search('right', 'left')
 
     # TRAINING HYPERPARAMETERS 
     batch_size                  = 16 # TinyStories uses 80, but I am training locally on my poor M1 Air
@@ -90,14 +94,16 @@ class Hyperparams(GridSearch):
     # WANDB INFO
     project                     = 'baselines' 
     entity                      = 'tiny-transformers' 
+    group                       = 'tok-exp'
 
     @property
     def tok(self):
         ''' properties are computed upon accessing them as attributes (`params.tok`) '''
+        kwargs = {'padding_side': self.padding_side, 'truncation_side': self.truncation_side}
         if not hasattr(self, '__tok'):
-            self.__tok = RobertaTokenizerFast.from_pretrained('10k-tok') \
+            self.__tok = RobertaTokenizerFast.from_pretrained('10k-tok', **kwargs) \
                 if isinstance(self.model_config, Rob) else \
-                GPT2TokenizerFast.from_pretrained('10k-tok') 
+                GPT2TokenizerFast.from_pretrained('10k-tok', **kwargs) 
         return self.__tok
 
     @property 
@@ -110,27 +116,25 @@ class Hyperparams(GridSearch):
 
     @property 
     def output_dir(self) -> str:
-        # TODO: revert
-        # return os.path.join('models', self.model_type, self.model_name)
-        return os.path.join('models', 'baseline', self.model_name)
+        return os.path.join('models', self.group, self.model_name)
 
     @property
     def model_name(self) -> str: 
-        return '-'.join([
+        name = '-'.join([
             'GPT' if isinstance(self.model, GPTNeoForCausalLM) else 'BERT',
             f'{self.model.num_parameters()//1e6:.1f}M',
             f'{self.model_config.num_layers if isinstance(self.model, GPTNeoForCausalLM) else self.model_config.num_hidden_layers}L', 
             f'{self.model_config.num_heads if isinstance(self.model, GPTNeoForCausalLM) else self.model_config.num_attention_heads}H', 
             f'{self.model_config.hidden_size}C',
             f'{self.model_config.intermediate_size}I',
-            f'{self.lr}lr'
+            f'{self.lr}lr',
+            # first letter of truncation_side 
+            f'{self.truncation_side[0].upper()}T',
+            # first letter of padding_side
+            f'{self.padding_side[0].upper()}P'
         ])
-
-    @property 
-    def model_type(self) -> str: 
-        model_type = 'GPT' if isinstance(self.model, GPTNeoForCausalLM) else 'RoBERTa'
-        if TEST: model_type += '-TEST'
-        return model_type
+        if TEST: name += '-TEST'
+        return name 
 
     @property
     def trainer(self) -> Trainer: 
@@ -203,11 +207,13 @@ def train(params: Hyperparams):
             return
 
     set_all_seeds()
+    run_id = None
     if not DEBUG:
-        wandb.init(
+        run = wandb.init(
             entity=params.entity, project=params.project, 
-            group=params.model_type, name=params.model_name, 
+            group=params.group, name=params.model_name, 
             config=params.__dict__)
+        run_id = run.id
 
     else: print('\033[1mRUNNING IN DEBUG MODE \033[0m')
 
@@ -223,12 +229,15 @@ def train(params: Hyperparams):
     del trainer.model
     del trainer
 
-    # TODO: EVALUATION
     set_all_seeds()
-    score = eval_and_aggregate({'model': params.model_name, 'index': 0, 'no_train': False})
-    wandb.log(score)
+    score = eval_and_aggregate(
+        {'model': params.model_name, 'group': params.group, 'index': 0, 'no_train': False}
+    )
     print(score)
 
+    # we need to reinitialise as the babylm eval pipeline inits a whole bunch of runs
+    wandb.init(entity=params.entity, project=params.project, id=run_id, resume='must')
+    wandb.log(score)
     wandb.finish()
 
 from tqdm.contrib.concurrent import process_map
@@ -242,7 +251,6 @@ if __name__ == '__main__':
     # note you still need to deal with allocating GPUs
     # or fit multiple models on the same GPU. 
     # process_map(train, enumerate(params), max_workers=1)
-
     for param in params:
         print(param)
         train(param)
