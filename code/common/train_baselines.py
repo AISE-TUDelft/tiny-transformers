@@ -225,10 +225,6 @@ def train(params: Hyperparams):
 
     # TODO: EVALUATION
     set_all_seeds()
-    subprocess.check_call()
-    subprocess.run(['./evaluate.sh', os.path.abspath(params.output_dir)], 
-                   capture_output=True)
-    
     score = eval_and_aggregate({'model': params.model_name, 'index': 0, 'no_train': False})
     wandb.log(score)
     print(score)
