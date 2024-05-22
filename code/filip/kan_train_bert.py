@@ -4,72 +4,82 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # or "0,1" for multiple GPUs
 
 
 import wandb; wandb.login()
-
-# TODO: Some gpu error, this fixes it but ask aral for the details
-# import torch
-# torch.use_deterministic_algorithms(False)
-
-small_dataset = True
-if len(sys.argv) > 1 and sys.argv[1] and sys.argv[1] == "true":
-    small_dataset = True
-elif len(sys.argv) > 1 and sys.argv[1] and sys.argv[1] == "false":
-    small_dataset = False
-
 from transformers import (
-    GPTNeoForCausalLM, GPTNeoConfig, GPT2TokenizerFast, set_seed
+    RobertaForMaskedLM, RobertaConfig, RobertaTokenizerFast, set_seed
 )
+print('Imports done')
+small_dataset = True
+if len(sys.argv) > 1 and (sys.argv[1] == 'True' or sys.argv[1] == 'true'):
+    small_dataset = True
+    print("Using small dataset")
+elif len(sys.argv) > 1 and (sys.argv[1] == 'False' or sys.argv[1] == 'false'):
+    small_dataset = False
+    print("Using large dataset")
+else:
+    print("Using small dataset")
 
 # %%
-config_gpt = dict(
+# config_gpt = dict(
 
+#     # EMBEDDING PARAMETERS
+#     vocab_size              = 10_000,   # number of tokens in the vocabulary 
+#     hidden_size             = 512,      # embedding size (vector length) of each token 
+#     max_position_embeddings = 512,      # maximum sequence length (context window)
+
+#     # BLOCKS (ATTN & FFN)
+#     num_layers          = 2,                    # number of transformer blocks
+#     attention_types     = [[["global", "local"], 1]], # (GPT-Neo-specific) global and local attention 
+#     num_heads           = 4,                    # attention heads
+#     window_size         = 256,                  # (GPT-Neo-specific) for local attention 
+#     intermediate_size   = 1024,                 # size of 'up-projection' layer in FFN
+
+#     pad_token_id = 0,           # need to specify this for tokenizer interop between models
+# )
+
+config_rob = dict(
+    
     # EMBEDDING PARAMETERS
-    vocab_size              = 10_000,   # number of tokens in the vocabulary 
-    hidden_size             = 512,      # to get to 10m parameters
-    max_position_embeddings = 512,      # maximum sequence length (context window)
+    vocab_size              = 10_000,   
+    hidden_size             = 512,      
+    # we add 1 as RoBERTa uses a special position embedding for the padding token (zero vector)
+    max_position_embeddings = 512 + 1, #config_gpt['max_position_embeddings'] + 1,
 
-    # BLOCKS (ATTN & FFN)
-    num_layers=2,                               # number of transformer blocks
-    attention_types=[[["global", "local"], 1]], # (GPT-Neo-specific) global and local attention 
-    num_heads=4,                                # attention heads
-    window_size=256,                            # (GPT-Neo-specific) for local attention 
-    intermediate_size=256,                     # size of 'up-projection' layer in FFN
+    # BLOCKS (of course naming is different in roberta :) )
+    num_hidden_layers = 2,
+    num_attention_heads = 4, 
+    intermediate_size=384,                     
 
-    pad_token_id = 0,           # need to specify this for tokenizer interop between models
+    pad_token_id = 0,
 )
+config_rob = RobertaConfig(**config_rob)
 
-config_gpt = GPTNeoConfig(**config_gpt)
-
-# %% [markdown]
-# ### Implement KAN instead of MLP
-
-# %%
+### Implement KAN instead of MLP
 from efficient_kan.model import KAN
 import torch
 from torch import nn
+
 class KANtoMLP(nn.Module):
 
-    def __init__(self, hidden_size, inner_dim):
+    def __init__(self, hidden_size, inner_dim, config):
         super().__init__()
         self.c_fc = KAN([hidden_size, inner_dim])
-        self.c_proj = KAN([inner_dim, hidden_size])
         self.act = nn.GELU()
 
     def forward(self, x):
         x = self.c_fc(x)
         x = self.act(x)
-        x = self.c_proj(x)
         return x
-        
+
 import random, numpy as np
 
-class CustomGPTNeoForCausalLM(GPTNeoForCausalLM):
+class CustomRobertaForMaskedLM(RobertaForMaskedLM):
     def __init__(self, config, mlp_implementation=None):
         super().__init__(config)
         
         if mlp_implementation == "KAN":
             # Override MLP with KAN in each transformer block
-            for block in self.transformer.h:
-                block.mlp = KANtoMLP(config.hidden_size, config.intermediate_size)
+            for layer in self.roberta.encoder.layer:
+                layer.intermediate = KANtoMLP(config.hidden_size, config.intermediate_size, config)
 def set_all_seeds(seed=42):
 
     set_seed(seed)
@@ -78,15 +88,15 @@ def set_all_seeds(seed=42):
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
 set_all_seeds()
-
-model = CustomGPTNeoForCausalLM(config=config_gpt, mlp_implementation="KAN")
+rob = CustomRobertaForMaskedLM(config=config_rob, mlp_implementation="KAN")
 
 print(f'''
-    This GPT has {model.num_parameters():,} parameters,
+     ROB has {rob.num_parameters():,} parameters.
     ''')
-
+# gpt, rob # uncomment to see model architecture
+# %%
 from transformers import PreTrainedTokenizer, PretrainedConfig
-
+print('get tokenizers')
 def get_tokenizer_for_config(Tok: PreTrainedTokenizer, config: PretrainedConfig):
 
     tokenizer = Tok.from_pretrained(
@@ -102,19 +112,40 @@ def get_tokenizer_for_config(Tok: PreTrainedTokenizer, config: PretrainedConfig)
     
     return tokenizer 
 
-tok_gpt = get_tokenizer_for_config(GPT2TokenizerFast, config_gpt)
+tok_rob = get_tokenizer_for_config(RobertaTokenizerFast, config_rob)
 
+'''
+# %%
+# NOTE: uncomment to tokenize the dataset (both tokenizers should give identical results)
+
+tokenized_gpt = dataset.map(
+    lambda x: tok_gpt(x['text'], truncation=True, padding='max_length'), 
+    batched=True, num_proc=64, batch_size=1_000)
+
+tokenized_gpt.save_to_disk('./tokenized_dataset', num_proc=5)
+
+# # sanity check that the tokenisers are indeed identical 
+# tokenized_rob = dataset.map(
+#     lambda x: tok_rob(x['text'], truncation=True, padding='max_length'), 
+#     batched=True, num_proc=64, batch_size=1_000)
+
+# for split in ['train', 'validation']:
+#     for sample_gpt, sample_rob in tqdm.tqdm(zip(tokenized_gpt[split], tokenized_rob[split])):
+#         assert sample_gpt == sample_rob
 
 # %%
+'''
 from datasets import load_from_disk 
-tokenized_dataset = load_from_disk(f'./tokenized_dataset_small') if small_dataset else load_from_disk('./tokenized_dataset')
+tokenized_dataset = load_from_disk(f'./tokenized_dataset_small') if small_dataset else load_from_disk(f'./tokenized_dataset')
 
 train_dataset = tokenized_dataset['train']
 eval_dataset  = tokenized_dataset['validation']
 
-assert len(tokenized_dataset['train'][0]['input_ids']) == config_gpt.max_position_embeddings
+print(len(tokenized_dataset['train'][0]['input_ids']))
+print(config_rob.max_position_embeddings)
+assert len(tokenized_dataset['train'][0]['input_ids']) == config_rob.max_position_embeddings - 1
 tokenized_dataset['train'][0]['input_ids'][-10:]
-# should be pad tokens (0), given that most short stories are <512 tokens
+# should be pad tokens (0), given that most short stories are <512 tokens 
 
 # %%
 from transformers import Trainer, TrainingArguments, DataCollatorForLanguageModeling
@@ -129,12 +160,14 @@ def get_hyperparameters(model, dataset):
 
     lr = 5e-4                        # TinyStories uses 5e-4, higher values better for small models
 
+    # future you will thank you for descriptive model names
+    # TODO: customise this name such that every model you train has a unique identifier!
     config      = model.config 
     model_name  = '-'.join([
-        'KAN2-GPT' if isinstance(model, CustomGPTNeoForCausalLM) else 'BERT',
+        'BERT-kan2',
         f'{model.num_parameters()//1e6:.1f}M',
-        f'{config.num_layers if isinstance(model, GPTNeoForCausalLM) else config.num_hidden_layers}L', 
-        f'{config.num_heads if isinstance(model, GPTNeoForCausalLM) else config.num_attention_heads}H', 
+        f'{config.num_hidden_layers}L', 
+        f'{config.num_attention_heads}H', 
         f'{config.hidden_size}C',
         f'{config.intermediate_size}I'
     ])
@@ -150,8 +183,7 @@ def get_hyperparameters(model, dataset):
         lr = lr,
         eval_steps = eval_steps
     )
-
-params_gpt = get_hyperparameters(model, train_dataset)
+params_rob = get_hyperparameters(rob, train_dataset)
 
 # %%
 def get_trainer(
@@ -193,7 +225,7 @@ def get_trainer(
         train_dataset = train_dataset, 
         eval_dataset = eval_dataset,
         data_collator = DataCollatorForLanguageModeling(
-            tokenizer, mlm=False),
+            tokenizer, mlm=isinstance(model, RobertaForMaskedLM)),
     )
 
     # print amount of training steps, and how often the model is evaluated
@@ -208,9 +240,9 @@ def get_trainer(
     return trainer
 
 # %%
-out_dir = './results/models_kan' 
+out_dir = './results/models_kan/' 
 
-trainer_gpt = get_trainer(model, tok_gpt, train_dataset, eval_dataset, out_dir, **params_gpt)
+trainer_rob = get_trainer(rob, tok_rob, train_dataset, eval_dataset, out_dir, **params_rob)
 
 # %% [markdown]
 # Finally, we can train. 
@@ -224,9 +256,13 @@ def do_train(trainer: Trainer, name: str, out_dir: str):
     trainer.train()
     trainer.save_model(os.path.join(out_dir, name))
 
+    del trainer.model
+    del trainer
+    wandb.finish()
+
 # %%
 # words vs. tokens 
 len(train_dataset['text'][11]), len(train_dataset[11]['input_ids'])
 
 # %%
-do_train(trainer_gpt, params_gpt['model_name'], out_dir)
+do_train(trainer_rob, params_rob['model_name'], out_dir)
