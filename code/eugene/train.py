@@ -92,7 +92,7 @@ def train(name, model, tokenizer, dataset, debug, gpu):
     os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu) # or "0,1" for multiple GPUs
     lr = 5e-4
     num_epochs = 2
-    batch_size = 80 if not debug else 8
+    batch_size = 32 if not debug else 8
     grad_accum_steps = 16
 
     output_dir = f'models/eugene/{name}'
@@ -126,7 +126,7 @@ def train(name, model, tokenizer, dataset, debug, gpu):
 
     trainer = Trainer(
 
-        model=model,
+        model=model.cuda(),
         args=training_args,
 
         train_dataset=training_data,
@@ -190,4 +190,3 @@ if __name__ == "__main__":
     mode_name = get_model_name(args.model_type, args.sparsity_type, args.sparsity_level)
     train(mode_name, model, tokenizer, dataset, args.debug, args.gpu)
 
-    #file not found, and why did it not skip training?
