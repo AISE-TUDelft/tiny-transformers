@@ -2,7 +2,7 @@ import os, sys, subprocess, json, torch, wandb, pandas as pd, traceback, time
 from tqdm.contrib.concurrent import process_map
 
 
-MODEL_DIR       = '../models/GPT-test-tokenizers'
+MODEL_DIR       = 'models/baseline'
 N_CUDA_DEVICES  = torch.cuda.device_count()
 ENV_NAME        = 'babylm'
 
@@ -45,7 +45,6 @@ def run_babylm_pipeline(model_path: str, cuda_index: int = 0, verbose=True):
         f'2>&1 | tee {log_file}'                        # log the output & stderr to 'eval.log
     ])
 
-    print(f'command used: \n{command}')
     process = subprocess.Popen(
         command,
         stdout=sys.stdout if verbose else subprocess.PIPE, 
@@ -189,19 +188,13 @@ def add_to_wandb(result):
     '''
     
     # get the run ID from the model name
-    # run_ids = pd.read_csv('run-ids.csv')
-    # model = result['model']
-    # run_id = run_ids[run_ids['Name'] == model]['ID'].values[0]
-    if "babylm" in model:
-        run_id = "xi6v38c4"
-    elif "open" in model:
-        run_id = "39h377cu"
-    else:
-        run_id = "jrkkv5ll"
+    run_ids = pd.read_csv('run-ids.csv')
+    model = result['model']
+    run_id = run_ids[run_ids['Name'] == model]['ID'].values[0]
 
     # resume the wandb run and log the result
     wandb.init(
-        key='6f46f55bd51d76400f1e877ea7dfa75c5c7d05d6', entity='tiny-transformers', project='tokenizer-data-test', id=run_id, resume='must'
+        entity='tiny-transformers', project='baselines', id=run_id, resume='must'
     )
     wandb.log(result)
     wandb.finish()
@@ -255,15 +248,14 @@ def eval_multiprocess(kwargs: dict):
 
 if __name__ == '__main__':
     ''' Evaluate on multiple GPUs, but without sharding models across GPUs. '''
-    wandb.login(key='6f46f55bd51d76400f1e877ea7dfa75c5c7d05d6')
 
     # Create kwargs
     models : list[dict] = [ 
         {
             'model_path': os.path.join(os.path.abspath(MODEL_DIR), model),
             # 'index'     : i % N_CUDA_DEVICES, 
-            'index'     : 0, 
-            'verbose'   : True,
+            'index'     : 1, 
+            'verbose'   : False,
         } for i, model in 
             enumerate(reversed(sorted(os.listdir(MODEL_DIR))))
     ]
@@ -279,10 +271,6 @@ if __name__ == '__main__':
     missing = [r for r in results if is_missing(r)]
     results = sorted([r for r in results if not is_missing(r)], key=lambda r: r['blimp_avg'])
 
-    print(f'\n\n\033[1m{len(missing)} models in {MODEL_DIR} did not complete evaluation\033[0m')
-    for miss in missing: 
-        print(f'{miss["model"]} \n{miss["error"]}')
-
     print(f'\033[1mFinal Scores\n{"Model":>50s}  \tBLiMP\t GLUE\033[0m')
     for result in results:
         model = result['model']
@@ -291,7 +279,8 @@ if __name__ == '__main__':
 
         print(f'{model:>50s}  \t{blimp_avg*100:.1f}%\t {glue_avg*100:.1f}')
 
-    for result in results:
-        add_to_wandb(result)
+    print(f'\n\n\033[1m{len(missing)} models in {MODEL_DIR} did not complete evaluation\033[0m')
+    for miss in missing: 
+        print(f'{miss["model"]} \n{miss["error"]}')
 
-
+    for result in results: add_to_wandb(result)

@@ -1,11 +1,13 @@
 import os
 from typing import Optional, Tuple, Union
-from RoPE import apply_rotary_pos_emb, rotate_half, GPTNeoXRotaryEmbedding
+from RoPE import apply_rotary_pos_emb, GPTNeoXRotaryEmbedding
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+
+#Inspiration taken from https://github.com/jlamprou/Infini-Attention/commit/21b31051cb03502db41be883f4ced37ceacc1bca
 
 class InfiniAttention(nn.Module):
     def __init__(self, config, attention_type):
@@ -40,8 +42,8 @@ class InfiniAttention(nn.Module):
         
         # The 1.0 is pct of the head_dim to use for rotary embedding
         self.rotary_ndims = int(self.head_dim * 1.0)
-
-        self.rotary_emb = GPTNeoXRotaryEmbedding(self.rotary_ndims, self.config.max_position_embeddings, base=self.config.rotary_emb_base)
+        self.max_positions = max_positions
+        self.rotary_emb = GPTNeoXRotaryEmbedding(self.rotary_ndims, max_positions, base=10000)
 
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
@@ -50,14 +52,14 @@ class InfiniAttention(nn.Module):
         self.ELU = nn.ELU()
         self.betas = nn.Parameter(torch.randn(1, self.num_heads, 1, 1))
         # needs to become num_heads, head_dim, head_dim
-        # self.register_buffer("mem", torch.zeros((self.num_heads,self.head_dim, self.head_dim)))
-        self.mem = torch.zeros((self.num_heads,self.head_dim, self.head_dim))
-        self.z = torch.zeros((self.num_heads, self.head_dim, 1))
+        self.register_buffer("mem", torch.zeros((self.num_heads,self.head_dim, self.head_dim)))
+        # self.mem = torch.zeros((self.num_heads,self.head_dim, self.head_dim))
+        # self.z = torch.zeros((self.num_heads, self.head_dim, 1))
         # needs to become num_heads, head_dim, 1
-        # self.register_buffer("z", torch.zeros((self.num_heads, self.head_dim, 1)))
+        self.register_buffer("z", torch.zeros((self.num_heads, self.head_dim, 1)))
 
 
-        self.segment_size = 128
+        self.segment_size = 512
     
 
 
@@ -93,13 +95,17 @@ class InfiniAttention(nn.Module):
 
         # We retrieve from memory before we add to it
         A_mem = ((torch.matmul(sigma_q, mem)) / ((torch.matmul(sigma_q, z)) + 1e-6))
-
+        # print("A_mem[0][0]", A_mem[0][0][0][:3])
         query_length, key_length = query.size(-2), key.size(-2)
         causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
         mask_value = torch.finfo(attn_weights.dtype).min
         # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
         # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
         mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
+        # print("causal_mask", causal_mask.size())
+        # print("attn_weights", attn_weights.size())
+        #For some reason attn_weights size keeps growing when causal_mask caps at 512
+
         attn_weights = torch.where(causal_mask, attn_weights, mask_value)
 
         if attention_mask is not None:
@@ -128,18 +134,28 @@ class InfiniAttention(nn.Module):
         z_update = z_update.permute(0, 2, 1)
 
         z = z + z_update
-
+        # print("mem", mem.size())
+        # print("z", z.size())
+        # print("sigma_q", sigma_q.size())
+        # print("sigma_k", sigma_k[0][0][0][:3])
+        # print("mem[0][0]", mem[0][0][:3])
+        # print("z[0][0]", z[0][0][:3])
         return attn_output, attn_weights, mem, z
+    def reset_mem(self):
+        self.mem.zero()
+        self.z.zero()
 
     def forward(
         self,
         hidden_states,
+        position_ids,
         attention_mask=None,
         layer_past=None,
         head_mask=None,
         use_cache=False,
         output_attentions=False,
     ):  
+
         has_layer_past = layer_past is not None
 
         query = self.q_proj(hidden_states)
@@ -164,6 +180,8 @@ class InfiniAttention(nn.Module):
         if has_layer_past:
             seq_len += layer_past[0].shape[-2]
         cos, sin = self.rotary_emb(value, seq_len=seq_len)
+
+
         query, key = apply_rotary_pos_emb(query_rot, key_rot, cos, sin, position_ids)
         query = torch.cat((query, query_pass), dim=-1)
         key = torch.cat((key, key_pass), dim=-1)

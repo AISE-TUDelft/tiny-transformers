@@ -14,6 +14,7 @@ This repository contains both the code and the papers for the Q4/2024 Bachelor R
 * Filip's [Link](https://www.overleaf.com/read/bfkdnmbgkjdv#65d3fa)
 * Rafael's Overleaf [Link](https://www.overleaf.com/read/vcdhpwpgtnfg#280270)
 * Eugene's Overleaf [Link](https://www.overleaf.com/6281436958jkbtpsjhvyvp#1252e1)
+* Lauri's Overleaf [Link](https://www.overleaf.com/read/cnfbzbhcqrbg#150dc6)
 
 
 --- 
