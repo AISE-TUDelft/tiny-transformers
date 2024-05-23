@@ -1,5 +1,4 @@
 transformers
-torch
 numpy
 datasets
 jupyterlab

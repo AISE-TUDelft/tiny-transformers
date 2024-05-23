@@ -638,7 +638,7 @@ class SparseRobertaForMaskedLM(SparseRobertaPreTrainedModel):
             for block in self.roberta.encoder.layer:
                 if block.mlp.sparsity_type == SparsityType.MOE:
                     masked_lm_loss += block.mlp.implementation.utilization_loss
-                    print("utilization loss", block.mlp.implementation.utilization_loss)
+                    #print("utilization loss", block.mlp.implementation.utilization_loss)
                     block.mlp.implementation.utilization_loss = 0
 
 
