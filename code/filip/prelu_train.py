@@ -1,4 +1,4 @@
-import os
+import os, sys
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # or "0,1" for multiple GPUs
 
 import wandb; wandb.login()
@@ -53,27 +53,21 @@ config_rob = dict(
 config_gpt = GPTNeoConfig(**config_gpt)
 config_rob = RobertaConfig(**config_rob)
 
-# TODO: implement GeGLU
-# REF: https://github.com/ltgoslo/ltg-bert/blob/main/training/model.py#L14
+# TODO: implement PReLU activation function
+# REF: https://pytorch.org/docs/stable/generated/torch.nn.PReLU.html#torch.nn.PReLU
 
 import torch
 from torch import nn
 import torch.nn.functional as F
 
-class GeGLU(nn.Module):
-    def forward(self, x):
-        x, gate = x.chunk(2, dim=-1)
-        x = x * F.gelu(gate, approximate='tanh')
-        return x
-
-# Fix MLP for GPT-Neo with GeGlu
-class NeoGeGluMLP(nn.Module):
+# Fix MLP for GPT-Neo with PReLU
+class NeoPReLUMLP(nn.Module):
     def __init__(self, intermediate_size, config):  # in MLP: intermediate_size= 4 * hidden_size
         super().__init__()
         embed_dim = config.hidden_size
-        self.c_fc = nn.Linear(embed_dim, intermediate_size * 2) # to match size for GeGLU
+        self.c_fc = nn.Linear(embed_dim, intermediate_size)
         self.c_proj = nn.Linear(intermediate_size, embed_dim)
-        self.act = GeGLU()
+        self.act = nn.PReLU(num_parameters=intermediate_size // 2, init=0.25)
         self.dropout = nn.Dropout(float(config.resid_dropout))
 
     def forward(self, hidden_states):
@@ -83,12 +77,12 @@ class NeoGeGluMLP(nn.Module):
         hidden_states = self.dropout(hidden_states)
         return hidden_states
     
-# Fix MLP for RoBERTa with GeGLU
-class RobertaGeGluMLP(nn.Module):
+# Fix MLP for RoBERTa with PReLU
+class RobertaPReLUMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.intermediate_size * 2)
-        self.intermediate_act_fn = GeGLU()
+        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.intermediate_act_fn = nn.PReLU(num_parameters=config.intermediate_size // 2, init=0.25)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
@@ -99,19 +93,19 @@ class CustomGPTNeoForCausalLM(GPTNeoForCausalLM):
     def __init__(self, config, act_implementation=None):
         super().__init__(config)
         
-        if act_implementation == "GEGLU":
+        if act_implementation == "PRELU":
             # Override MLP with KAN in each transformer block
             for block in self.transformer.h:
-                block.mlp = NeoGeGluMLP(config.intermediate_size, config)
+                block.mlp = NeoPReLUMLP(config.intermediate_size, config)
 
 class CustomRobertaForMaskedLM(RobertaForMaskedLM):
     def __init__(self, config, act_implementation=None):
         super().__init__(config)
         
-        if act_implementation == "GEGLU":
+        if act_implementation == "PRELU":
             # Override MLP with KAN in each transformer block
             for layer in self.roberta.encoder.layer:
-                layer.intermediate = RobertaGeGluMLP(config)
+                layer.intermediate = RobertaPReLUMLP(config)
 
 import random, numpy as np                
 def set_all_seeds(seed=42):
@@ -123,13 +117,15 @@ def set_all_seeds(seed=42):
     torch.cuda.manual_seed_all(seed)
 set_all_seeds()
 
-gpt = CustomGPTNeoForCausalLM(config=config_gpt, act_implementation="GEGLU")
-rob = CustomRobertaForMaskedLM(config=config_rob, act_implementation="GEGLU")
+gpt = CustomGPTNeoForCausalLM(config=config_gpt, act_implementation="PRELU")
+rob = CustomRobertaForMaskedLM(config=config_rob, act_implementation="PRELU")
 
 print(f'''
     This GPT has {gpt.num_parameters():,} parameters,
      and ROB has {rob.num_parameters():,} parameters.
     ''')
+
+# gpt, rob # uncomment to see model architecture
 
 # %%
 from transformers import PreTrainedTokenizer, PretrainedConfig
@@ -180,7 +176,7 @@ def get_hyperparameters(model, dataset):
     # TODO: customise this name such that every model you train has a unique identifier!
     config      = model.config 
     model_name  = '-'.join([
-        'GPT-GeGlu' if isinstance(model, GPTNeoForCausalLM) else 'BERT-GeGlu',
+        'GPT-PReLU' if isinstance(model, GPTNeoForCausalLM) else 'BERT-PReLU',
         f'{model.num_parameters()//1e6:.1f}M',
         f'{config.num_layers if isinstance(model, GPTNeoForCausalLM) else config.num_hidden_layers}L', 
         f'{config.num_heads if isinstance(model, GPTNeoForCausalLM) else config.num_attention_heads}H', 
@@ -258,7 +254,7 @@ def get_trainer(
     return trainer
 
 # %%
-out_dir = './results/models_geglu/' 
+out_dir = './results/models_PReLU/' 
 
 trainer_gpt = get_trainer(gpt, tok_gpt, train_dataset, eval_dataset, out_dir, **params_gpt)
 trainer_rob = get_trainer(rob, tok_rob, train_dataset, eval_dataset, out_dir, **params_rob)
@@ -266,7 +262,7 @@ trainer_rob = get_trainer(rob, tok_rob, train_dataset, eval_dataset, out_dir, **
 # %%
 def do_train(trainer: Trainer, name: str, out_dir: str): 
 
-    wandb.init(project='tiny-transformers', name=name, group='geglu', config=trainer.args)
+    wandb.init(project='tiny-transformers', name=name, group='PReLU', config=trainer.args)
     trainer.train()
     trainer.save_model(os.path.join(out_dir, name))
 
