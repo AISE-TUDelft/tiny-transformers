@@ -74,7 +74,7 @@ People often use `docker` as a development container. This makes it easy to deve
 
 ```sh
 # on ronaldo, at /home/aral (~)
-docker run --name <YOUR_NAME> --user root --rm --gpus '"device=0"' --shm-size=20g -d -v "${PWD}":/home/jovyan/work quay.io/jupyter/minimal-notebook
+docker run --name <YOUR_NAME> --user root --rm --gpus '"device=0"' --shm-size=20g --memory=10g -d -v "${PWD}":/home/jovyan/work quay.io/jupyter/minimal-notebook
 ```
 
 Let me explain what each flag does: 
@@ -84,7 +84,8 @@ Let me explain what each flag does:
 --user root           # user in the container (root, i.e. su)
 --rm                  # deletes container after you shut it down
 --gpus '"device=0"'   # which gpus to use (set to 'all' for 2 GPUs)
---shm-size=20g 
+--shm-size=20g
+--memory=10g          # cap the memory to avoid crashing others' processes
 -d                    # run container in background (detach)
 
 # mount cwd into container's /home/jovyan/work
