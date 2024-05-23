@@ -26,14 +26,14 @@ def set_seeds(seed=123):
     torch.cuda.manual_seed_all(seed)
 
 # load training data
-def load_training_data(path="data/TokenizedTinyStories"):
+def load_training_data(path="../../data/TokenizedTinyStories"):
     return load_from_disk(path)
 
 # load model according to config
 
 def get_tokenizer_for_config(tok, config):
     tokenizer = tok.from_pretrained(
-        'code/common/10k-tok',  # our custom tokenizer
+        'common/10k-tok',  # our custom tokenizer
         model_max_length=512  # sequence length (context window)
     )
 
@@ -48,13 +48,13 @@ def load_tokenizer_and_model(model_type, sparsity_type, sparsity_level):
     model_name = ""
     if model_type == 'gpt':
         if sparsity_type == 'baseline':
-            with open("code/eugene/model_configs/gpt_baseline.json",'r') as config_file:
+            with open("model_configs/gpt_baseline.json",'r') as config_file:
                 config_dict = json.load(config_file)
             config_gpt = GPTNeoConfig(**config_dict)
             tok_gpt = get_tokenizer_for_config(GPT2TokenizerFast,config_gpt)
             return tok_gpt, GPTNeoForCausalLM(config=config_gpt)
         else:
-            with open(f"code/eugene/model_configs/gpt_{sparsity_type}_{sparsity_level}.json", 'r') as config_file:
+            with open(f"model_configs/gpt_{sparsity_type}_{sparsity_level}.json", 'r') as config_file:
                 config_dict = json.load(config_file)
             config_gpt = SparseGPTNeoConfig(**config_dict)
             tok_gpt = get_tokenizer_for_config(GPT2TokenizerFast,config_gpt)
@@ -62,13 +62,13 @@ def load_tokenizer_and_model(model_type, sparsity_type, sparsity_level):
 
     elif model_type == 'roberta':
         if sparsity_type == 'baseline':
-            with open("code/eugene/model_configs/roberta_baseline.json", 'r') as config_file:
+            with open("model_configs/roberta_baseline.json", 'r') as config_file:
                 config_dict = json.load(config_file)
             config_rob = RobertaConfig(**config_dict)
             tok_rob = get_tokenizer_for_config(RobertaTokenizerFast,config_rob)
             return tok_rob, RobertaForMaskedLM(config=config_rob)
         else:
-            with open(f"code/eugene/model_configs/roberta_{sparsity_type}_{sparsity_level}.json", 'r') as config_file:
+            with open(f"model_configs/roberta_{sparsity_type}_{sparsity_level}.json", 'r') as config_file:
                 config_dict = json.load(config_file)
             config_rob = SparseRobertaConfig(**config_dict)
             tok_rob = get_tokenizer_for_config(RobertaTokenizerFast,config_rob)
@@ -95,7 +95,7 @@ def train(name, model, tokenizer, dataset, debug, gpu):
     batch_size = 32 if not debug else 8
     grad_accum_steps = 16
 
-    output_dir = f'models/eugene/{name}'
+    output_dir = f'../../models/eugene/{name}'
 
 
 
@@ -138,7 +138,7 @@ def train(name, model, tokenizer, dataset, debug, gpu):
 
     if not debug:
         model_type = 'gpt' if 'gpt' in name else 'roberta'
-        with open('code/eugene/wandb_key.txt') as f:
+        with open('wandb_key.txt') as f:
             wandb.login(key=f.read())
         wandb.init(
             entity='tiny-transformers', project='eugene',
