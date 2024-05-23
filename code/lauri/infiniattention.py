@@ -7,6 +7,8 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+#Inspiration taken from https://github.com/jlamprou/Infini-Attention/commit/21b31051cb03502db41be883f4ced37ceacc1bca
+
 class InfiniAttention(nn.Module):
     def __init__(self, config, attention_type):
         super().__init__()
@@ -50,14 +52,14 @@ class InfiniAttention(nn.Module):
         self.ELU = nn.ELU()
         self.betas = nn.Parameter(torch.randn(1, self.num_heads, 1, 1))
         # needs to become num_heads, head_dim, head_dim
-        # self.register_buffer("mem", torch.zeros((self.num_heads,self.head_dim, self.head_dim)))
-        self.mem = torch.zeros((self.num_heads,self.head_dim, self.head_dim))
-        self.z = torch.zeros((self.num_heads, self.head_dim, 1))
+        self.register_buffer("mem", torch.zeros((self.num_heads,self.head_dim, self.head_dim)))
+        # self.mem = torch.zeros((self.num_heads,self.head_dim, self.head_dim))
+        # self.z = torch.zeros((self.num_heads, self.head_dim, 1))
         # needs to become num_heads, head_dim, 1
-        # self.register_buffer("z", torch.zeros((self.num_heads, self.head_dim, 1)))
+        self.register_buffer("z", torch.zeros((self.num_heads, self.head_dim, 1)))
 
 
-        self.segment_size = 1028
+        self.segment_size = 512
     
 
 
@@ -93,13 +95,17 @@ class InfiniAttention(nn.Module):
 
         # We retrieve from memory before we add to it
         A_mem = ((torch.matmul(sigma_q, mem)) / ((torch.matmul(sigma_q, z)) + 1e-6))
-
+        # print("A_mem[0][0]", A_mem[0][0][0][:3])
         query_length, key_length = query.size(-2), key.size(-2)
         causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
         mask_value = torch.finfo(attn_weights.dtype).min
         # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
         # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
         mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
+        # print("causal_mask", causal_mask.size())
+        # print("attn_weights", attn_weights.size())
+        #For some reason attn_weights size keeps growing when causal_mask caps at 512
+
         attn_weights = torch.where(causal_mask, attn_weights, mask_value)
 
         if attention_mask is not None:
@@ -128,8 +134,16 @@ class InfiniAttention(nn.Module):
         z_update = z_update.permute(0, 2, 1)
 
         z = z + z_update
-
+        # print("mem", mem.size())
+        # print("z", z.size())
+        # print("sigma_q", sigma_q.size())
+        # print("sigma_k", sigma_k[0][0][0][:3])
+        # print("mem[0][0]", mem[0][0][:3])
+        # print("z[0][0]", z[0][0][:3])
         return attn_output, attn_weights, mem, z
+    def reset_mem(self):
+        self.mem.zero()
+        self.z.zero()
 
     def forward(
         self,

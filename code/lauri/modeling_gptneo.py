@@ -384,7 +384,12 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, self.config.num_layers)
 
         if inputs_embeds is None:
+            # print("input_ids", input_ids.size())
+            # print("input_ids[0]", input_ids[0])
             inputs_embeds = self.wte(input_ids)
+            # print("inputs_embeds", inputs_embeds.size())
+            # print("inputs_embeds[0][0][-5:]", inputs_embeds[0][-5:][-5:])
+        
         # position_embeds = self.wpe(position_ids)
         hidden_states = inputs_embeds
 
@@ -533,6 +538,10 @@ class InfiniAttentionGPTNeoForCausalLM(GPTNeoPreTrainedModel):
         )
 
         return model_inputs
+    
+    def reset_memory(self):
+        for layer in self.transformer.h:
+            layer.attn.reset_mem()
 
     @add_start_docstrings_to_model_forward(GPT_NEO_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
