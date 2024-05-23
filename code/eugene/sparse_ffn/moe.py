@@ -59,7 +59,7 @@ class GatingNetwork(nn.Module):
 
     def utilization_loss(self, weights):
         importance = weights.reshape(-1, self.num_experts).sum(dim=0)
-        square_cv = importance.var(correction=0) / importance.mean().pow(2)
+        square_cv = torch.var(importance) / importance.mean().pow(2)
         return self.utilization_factor * square_cv
 
 class MoE(nn.Module):

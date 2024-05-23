@@ -528,9 +528,9 @@ class SparseGPTNeoForCausalLM(SparseGPTNeoPreTrainedModel):
 
             for block in self.transformer.h:
                 if block.mlp.sparsity_type == SparsityType.MOE:
-                    print(block.mlp.utilization_loss)
+                    #print(block.mlp.implementation.utilization_loss)
                     loss += block.mlp.implementation.utilization_loss
-                    block.mlp.utilization_loss = 0
+                    block.mlp.implementation.utilization_loss = 0
 
             lm_logits = lm_logits.to(hidden_states.dtype)
             loss = loss.to(hidden_states.dtype)

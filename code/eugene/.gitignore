@@ -4,3 +4,4 @@ wandb_key.txt
 data
 wandb
 **/__pycache__/
+common
