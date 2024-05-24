@@ -1,0 +1,1 @@
+{"vocab_size": 10000, "hidden_size": 256, "max_position_embeddings": 512, "num_layers": 2, "attention_types": [[["global", "local"], 1]], "num_heads": 4, "window_size": 256, "sparsity_type": 2, "num_blocks": 64, "dim_lowrank": 4, "intermediate_size": 4032}

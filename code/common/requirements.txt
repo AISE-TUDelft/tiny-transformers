@@ -1,4 +1,6 @@
-transformers[torch]
+transformers
+torch
 datasets
 wandb
 tqdm
+promptsource

@@ -14,6 +14,9 @@
 	path = papers/4-module-ordering
 	url = git@github.com:laurikskl/module-ordering-in-transfomers.git
 	branch = main
+[submodule "papers/1-hidden-layers"]
+	path = papers/1-hidden-layers
+	url = git@github.com:eugeneman418/FFN-Unveiled.git
 [submodule "papers/AttentionQKV"]
 	path = papers/AttentionQKV
 	url = git@github.com:St1p42/AttentionQKV.git
