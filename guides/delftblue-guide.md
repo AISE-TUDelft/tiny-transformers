@@ -70,7 +70,35 @@ This is not a comprehensive guide, but should help you in setting up a developme
     conda deactivate
     ```
     From this file you can customize the resources, and the time of execution.
-    
+    For instance, this is what worked for Filip:
+
+    ```bash
+    #!/bin/bash
+    #SBATCH --job-name=train_kan_bert
+    #SBATCH --partition=gpu-a100
+    #SBATCH -time=20:00:00
+    #SBATCH --nodes=1
+    #SBATCH --ntasks=1
+    #SBATCH --cpus-per-task=4
+    #SBATCH --gpus-per-task=1
+    #SBATCH --mem=24G
+    #SBATCH --account=Education-EEMCS-Courses-CSE3000
+
+    # Load modules:
+    module load 2022r2 
+    module load openmpi 
+    module load miniconda3
+    module load cuda/11.7
+
+    # Set conda env:
+    unset CONDA_SHLVL
+    source "$(conda info --base)/etc/profile.d/conda.sh"
+    conda activate jupyterlab
+
+    srun python kan_train_bert.py false > logs/kan_train_bert.log 2>&1
+    conda deactivate
+    ```
+
 4. Submit your job:
     ``` bash
     sbatch jupyterlab.sh

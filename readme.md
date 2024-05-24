@@ -7,22 +7,54 @@ This repository contains both the code and the papers for the Q4/2024 Bachelor R
 - [Slide Deck](https://www.icloud.com/keynote/0487EgSVm26sNx1G3LGzfRtfw#Tiny_Transformers) for weekly meetings.
 
 
-#### Overleaf links 
+#### Links
 
-> [!NOTE]
-> Please add your Overleaf links here once you have set them up ([guide](papers/readme.md)).
-* Filip's [Link](https://www.overleaf.com/read/bfkdnmbgkjdv#65d3fa)
-* Rafael's Overleaf [Link](https://www.overleaf.com/read/vcdhpwpgtnfg#280270)
-* Eugene's Overleaf [Link](https://www.overleaf.com/6281436958jkbtpsjhvyvp#1252e1)
-* Lauri's Overleaf [Link](https://www.overleaf.com/read/cnfbzbhcqrbg#150dc6)
-* Khalit's Overleaf [Link](https://www.overleaf.com/read/cwtdytkhbwrv#15d3ea)
+> [!TIP] 
+> At the end of the project, let's add the paper and presentations here too. We also need a place to show off your posters :)
+
+| Student | Topic                              | Overleaf                                                          | Code                                                                                           |  Paper | Presentation |
+| ------- | ---------------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ------ | ------------ |
+| Eugene  | **Sparsity and Performance**       | [link](https://www.overleaf.com/6281436958jkbtpsjhvyvp#1252e1)    | [link](https://github.com/AISE-TUDelft/tiny-transformers/tree/main/code/eugene/)               |        |              |
+| Filip   | **Adaptive Activation Functions**  | [link](https://www.overleaf.com/read/bfkdnmbgkjdv#65d3fa./filip/) | [link](https://github.com/AISE-TUDelft/tiny-transformers/tree/main/code/filip/)                |        |              |
+| Khalit  | **Attention QKV & Heads**          | [link](https://www.overleaf.com/read/cwtdytkhbwrv#15d3ea)         | [link](https://github.com/AISE-TUDelft/tiny-transformers/tree/main/code/khalit_attention_QKV/) |        |              |
+| Lauri   | **Limits of Infini-Attention**     | [link](https://www.overleaf.com/read/cnfbzbhcqrbg#150dc6)         | [link](https://github.com/AISE-TUDelft/tiny-transformers/tree/main/code/lauri/)                |        |              |
+| Rafael  | **Comparing Tokenisation Schemes** | [link](https://www.overleaf.com/read/vcdhpwpgtnfg#280270)         | [link](https://github.com/AISE-TUDelft/tiny-transformers/tree/main/code/rafael-tokenisation/)  |        |              |
+
+#### Guides
+See [`guides`](./guides/) for tutorials on remote development and implementation details. 
+
+###### Remote Development
+
+- [Ronaldo Guide](./guides/ronaldo-guide.md) on setting up a remote Docker Dev container. 
+- [DelftBlue Guide](./guides/delftblue-guide.md) for setting up a remote Jupyter server & submitting `sbatch` scripts. 
+- [Kaggle & Google Cloud Guide](./guides/kaggle-google-guide.pdf) for running stuff in the cloud. 
+
+###### Practical Information
+
+- [Evaluation Guide](./guides/evaluation-guide.md) on the BabyLM pipeline. 
+- [Tokenizer Notes](./guides/tok-notes.md) on how I created the `10k-tok` tokenizer for RoBERTa & GPT-Neo. 
+- [Fabio's Explainability Notes](./guides/explainability-notes.md) that he presented in week 3. 
+- [Latex Guide](papers/readme.md) on setting up a latex document locally & syncing with Overleaf. 
+
+#### Resources
+See [`code/common`](./code/common/) for shared resources on tooling and training.
+
+###### Tooling
+- [10k-tokenizer](./common/10k-tok/) to use with RoBERTa and GPT-Neo. 
+- [grid search library](./common/grid_search.py) for generating hyperparameter combinations. 
+- [BabyLM evaluation pipeline](./common/evaluation-pipeline/) pinned to a specific commit for replicability. 
+
+###### Training
+- [sample pre-training notebook](./common/pre_train.ipynb) with explanations.
+- [sample pre-training script](./common/train_baselines.py) used for the baselines.
+- [sample evaluation script](./common/eval_baselines.py) used for the baselines. 
 
 
 --- 
 
-> Description from ProjectForum
-
 ## Architectural Decisions for Language Modelling with (Small) Transformers
+
+> Description from ProjectForum
 
 #### Prerequisites
 - Motivation to learn (i.e. read papers) about state-of-the-art natural-language modelling techniques.
