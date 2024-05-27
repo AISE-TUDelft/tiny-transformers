@@ -76,7 +76,7 @@ This is not a comprehensive guide, but should help you in setting up a developme
     #!/bin/bash
     #SBATCH --job-name=train_kan_bert
     #SBATCH --partition=gpu-a100
-    #SBATCH -time=20:00:00
+    #SBATCH --time=20:00:00
     #SBATCH --nodes=1
     #SBATCH --ntasks=1
     #SBATCH --cpus-per-task=4
