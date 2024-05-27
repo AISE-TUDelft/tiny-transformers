@@ -1,6 +1,6 @@
-transformers
 numpy
-datasets
 jupyterlab
+transformers
+datasets
 accelerate
 wandb
