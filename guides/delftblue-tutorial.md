@@ -5,6 +5,7 @@
 
 ```bash
 ssh delftblue
+tmux # start a sesh on the login node to keep our job alive
 
 srun --job-name=test --nodes=1 --ntasks=1 --partition=gpu-a100 --mem=80G --cpus-per-task=32 --gpus=1 --time=06:00:00 --pty bash
 
