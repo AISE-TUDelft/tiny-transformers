@@ -56,7 +56,7 @@ This is not a comprehensive guide, but should help you in setting up a developme
     #SBATCH --account=Education-EEMCS-Courses-CSE3000
 
     # Load modules:
-    module load 2022r2
+    module load 2023r1
     module load openmpi
     module load miniconda3
 
@@ -85,7 +85,7 @@ This is not a comprehensive guide, but should help you in setting up a developme
     #SBATCH --account=Education-EEMCS-Courses-CSE3000
 
     # Load modules:
-    module load 2022r2 
+    module load 2023r1 
     module load openmpi 
     module load miniconda3
     module load cuda/11.7
