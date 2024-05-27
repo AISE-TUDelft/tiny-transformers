@@ -253,10 +253,10 @@ if __name__ == '__main__':
     models : list[dict] = [ 
         {
             'model_path': os.path.join(os.path.abspath(MODEL_DIR), model),
-            # 'index'     : i % N_CUDA_DEVICES, 
-            'index'     : 1, 
-            'verbose'   : False,
+            'index'     : 0, 
+            'verbose'   : True,
         } for i, model in 
+            # I'm mainly doing reversed sorted to start with the most recent model first
             enumerate(reversed(sorted(os.listdir(MODEL_DIR))))
     ]
 

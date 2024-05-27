@@ -1,3 +1,5 @@
+#### End-To-End Training & Evaluation on DelftBlue 
+
 
 1. Run a delftblue job 
 
@@ -9,7 +11,7 @@ srun --job-name=test --nodes=1 --ntasks=1 --partition=gpu-a100 --mem=80G --cpus-
 tmux new -s aral 
 ```
 
-2. Setup env 
+2. Setup node
 
 ```bash
 module load 2023r1 2023r1-gcc11 openmpi miniconda3 cuda/11.7 git-lfs
@@ -40,27 +42,37 @@ scp -r . delftblue:/scratch/addemoor/tiny-transformers-2
 rsync . delftblue:/scratch/addemoor/tiny-transformers-3
 ```
 
-4. Set up envs 
+4. Set up python envs 
 
 ```bash
-cd tiny-transformers/code/common 
-
 ### TRAINING
+cd code/common 
 conda env create -n tiny 
+conda activate tiny 
+
 pip install -r requirements.txt
-pip install -U accelerate
-# also adding htop in there for convenience 
-conda install -c conda-forge htop
+conda install -c conda-forge htop # for tracking CPU/mem usage
 ```
 
 ```bash
 ### EVALUATION
 cd evaluation-pipeline
-conda env create -n babylm 
+conda create -n babylm python=3.10
 conda activate babylm 
 
-pip install -r .[dev]
+pip install -e .[dev]
 pip install wandb
+pip install -U torch # m80 CUDA drivers on delftblue
+
+unzip filter_data.zip
 ```
 
-5. Run training & evaluation. For this I modified the `train_baselines.py` script with my hyperparameters. 
+5. Run your training. For this I modified the `train_baselines.py` script with my hyperparameters. 
+
+```bash
+vim train_baselines.py # edit to do what you want
+python train_baselines.py
+```
+
+Note, if your training takes really long to complete a single step (i.e. more than 5hr total), it may be due to the delftblue's slow af I/O access. You can just load the entire dataset in-memory, using the `keep_in_memory=True` in `datasets`' `load_dataset` function. 
+

@@ -15,3 +15,5 @@ __pycache__
 data/
 .idea
 venv
+
+models
