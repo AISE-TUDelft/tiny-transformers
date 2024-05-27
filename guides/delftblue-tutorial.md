@@ -47,7 +47,8 @@ cd tiny-transformers/code/common
 
 ### TRAINING
 conda env create -n tiny 
-pip install -r requirements.txt 
+pip install -r requirements.txt
+pip install -U accelerate
 # also adding htop in there for convenience 
 conda install -c conda-forge htop
 ```
