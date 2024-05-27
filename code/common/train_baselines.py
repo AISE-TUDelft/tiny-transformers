@@ -95,9 +95,9 @@ class Hyperparams(GridSearch):
     model_config    :GridSearch = search(Gpt(), Rob())
 
     # TRAINING HYPERPARAMETERS 
-    batch_size                  = 64 # TinyStories uses 80, but I am training locally on my poor M1 Air
-    num_train_epochs            = 2  # TinyStories doesn't mention
-    gradient_accumulation_steps = 4 # TinyStories uses 16
+    batch_size                  = 16 # TinyStories uses 80, but I am training locally on my poor M1 Air
+    num_train_epochs            = 1  # TinyStories doesn't mention
+    gradient_accumulation_steps = 16 # TinyStories uses 16
 
     lr                   :float = 1e-3
     _train_steps                = len(dataset['train']) // (batch_size * gradient_accumulation_steps)
