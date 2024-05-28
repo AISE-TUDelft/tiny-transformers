@@ -1,7 +1,4 @@
 .idea
-**/*.ipynb_checkpoints/
 wandb_key.txt
-data
-wandb
-**/__pycache__/
+__pycache__
 common
