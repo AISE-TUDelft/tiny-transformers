@@ -13,4 +13,4 @@
 module load 2023r1 openmpi miniconda3 cuda/11.7
 
 cd ~/CSE3000/tiny-transformers/code/eugene/
-srun ./pretrain_all.sh 0 true # debug mode
+srun bash -l pretrain_all.sh 0 true # debug mode
