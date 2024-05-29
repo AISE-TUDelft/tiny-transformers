@@ -7,7 +7,7 @@
 #SBATCH --mem=80G
 #SBATCH --cpus-per-task=32
 #SBATCH --gpus=1
-#SBATCH --time=00:05:00 # debug mode
+#SBATCH --time=05:00:00
 #SBATCH --account=Education-EEMCS-Courses-CSE3000
 
 cd ~/CSE3000/tiny-transformers/code/eugene/
