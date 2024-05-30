@@ -5,7 +5,7 @@
 # take in one argument from command line, corresponding 
 # to the model directory
 echo "Root directory: $(pwd)"
-model_dir=$1
+model_dir=/Users/laurikeskull/Documents/Programming/tiny-transformers/code/lauri/results/new_infini/NEW_INFINI_GPT-9.0M-2L-4H-516C-1024I
 tok_files='10k-tok/*'
 
 # Resolve the absolute path of the model_dir

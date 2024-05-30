@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch GPT Neo model."""
-
+import pdb
 import os
 from typing import Optional, Tuple, Union
 
@@ -304,7 +304,7 @@ GPT_NEO_INPUTS_DOCSTRING = r"""
 class GPTNeoModel(GPTNeoPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-
+        self.max_position_embeddings = config.max_position_embeddings
         self.embed_dim = config.hidden_size
         self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
         # self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
@@ -347,6 +347,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -371,7 +372,6 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
             past_key_values = tuple([None] * len(self.h))
         else:
             past_length = past_key_values[0][0].size(-2)
-
         batch_size, seq_length = input_shape
 
         if position_ids is None:
@@ -384,11 +384,9 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, self.config.num_layers)
 
         if inputs_embeds is None:
-            # print("input_ids", input_ids.size())
-            # print("input_ids[0]", input_ids[0])
+
             inputs_embeds = self.wte(input_ids)
-            # print("inputs_embeds", inputs_embeds.size())
-            # print("inputs_embeds[0][0][-5:]", inputs_embeds[0][-5:][-5:])
+
         
         # position_embeds = self.wpe(position_ids)
         hidden_states = inputs_embeds
@@ -527,11 +525,70 @@ class InfiniAttentionGPTNeoForCausalLM(GPTNeoPreTrainedModel):
         else:
             model_inputs = {"input_ids": input_ids}
 
+        segment_length = self.transformer.max_position_embeddings
+        # input_segments = torch.tensor_split(input_ids[0], list(range(segment_length, input_ids.shape[1], segment_length)))
+
+        # for i in range(len(input_segments) - 1):
+        #     outputs = self(input_ids=input_segments[i].unsqueeze(0))
+
+        if input_ids.shape[1] > segment_length:
+            input_segments = torch.tensor_split(input_ids[0], list(range(segment_length, input_ids.shape[1], segment_length)))
+
+            for i in range(len(input_segments) - 1):
+                segment_input_ids = input_segments[i].unsqueeze(0)
+                
+                # Update position_ids for the current segment
+                if position_ids is not None:
+                    segment_position_ids = position_ids[:, :segment_input_ids.shape[1]]
+                else:
+                    segment_position_ids = None
+
+                # Update attention_mask for the current segment
+                if attention_mask is not None:
+                    segment_attention_mask = attention_mask[:, :segment_input_ids.shape[1]]
+                else:
+                    segment_attention_mask = None
+
+                self(
+                    input_ids=segment_input_ids,
+                    position_ids=segment_position_ids,
+                    attention_mask=segment_attention_mask,
+                    past_key_values=past_key_values,
+                    token_type_ids=token_type_ids,
+                    use_cache=False,
+                )
+            last_segment_input_ids = input_segments[-1].unsqueeze(0)
+            last_segment_position_ids = torch.arange(last_segment_input_ids.shape[1]).unsqueeze(0).to(last_segment_input_ids.device)
+
+            model_inputs.update(
+                {
+                    "input_ids": last_segment_input_ids,
+                    "position_ids": last_segment_position_ids,
+                    "attention_mask": attention_mask[:, -last_segment_input_ids.shape[1]:] if attention_mask is not None else None,
+                    "past_key_values": past_key_values,
+                    "use_cache": kwargs.get("use_cache"),
+                    "token_type_ids": token_type_ids,
+                }
+            )
+        else:
+            # Process the whole input if its length is within segment_length
+            segment_position_ids = torch.arange(input_ids.shape[1]).unsqueeze(0).to(input_ids.device)
+            model_inputs.update(
+                {
+                    "input_ids": input_ids,
+                    "position_ids": segment_position_ids,
+                    "attention_mask": attention_mask,
+                    "past_key_values": past_key_values,
+                    "use_cache": kwargs.get("use_cache"),
+                    "token_type_ids": token_type_ids,
+                }
+            )
+        
         model_inputs.update(
             {
                 "past_key_values": past_key_values,
                 "use_cache": kwargs.get("use_cache"),
-                "position_ids": position_ids,
+                "position_ids": last_segment_position_ids,
                 "attention_mask": attention_mask,
                 "token_type_ids": token_type_ids,
             }
@@ -541,7 +598,7 @@ class InfiniAttentionGPTNeoForCausalLM(GPTNeoPreTrainedModel):
     
     def reset_memory(self):
         for layer in self.transformer.h:
-            layer.attn.reset_mem()
+            layer.attn.attention.reset_mem()
 
     @add_start_docstrings_to_model_forward(GPT_NEO_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -632,3 +689,290 @@ class InfiniAttentionGPTNeoForCausalLM(GPTNeoPreTrainedModel):
             tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
             for layer_past in past_key_values
         )
+import os
+from typing import Optional, Tuple, Union
+from RoPE import apply_rotary_pos_emb, GPTNeoXRotaryEmbedding
+import torch
+import torch.nn.functional as F
+import torch.utils.checkpoint
+from torch import nn
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+
+#Inspiration taken from https://github.com/jlamprou/Infini-Attention/commit/21b31051cb03502db41be883f4ced37ceacc1bca
+
+class InfiniAttention(nn.Module):
+    def __init__(self, config, attention_type):
+        super().__init__()
+        self.config = config
+        max_positions = config.max_position_embeddings
+        bias = torch.tril(torch.ones((max_positions, max_positions), dtype=bool)).view(
+            1, 1, max_positions, max_positions
+        )
+
+        # local causal self attention is a sliding window where each token can only attend to the previous
+        # window_size tokens. This is implemented by updating the causal mask such that for each token
+        # all other tokens are masked except the previous window_size tokens.
+        if attention_type == "local":
+            bias = torch.bitwise_xor(bias, torch.tril(bias, -config.window_size))
+
+        self.register_buffer("bias", bias, persistent=False)
+        self.register_buffer("masked_bias", torch.tensor(-1e9), persistent=False)
+
+        self.attn_dropout = nn.Dropout(float(config.attention_dropout))
+        self.resid_dropout = nn.Dropout(float(config.resid_dropout))
+        self.is_causal = True
+
+        self.embed_dim = config.hidden_size
+        self.num_heads = config.num_heads
+        self.head_dim = self.embed_dim // self.num_heads
+        if self.head_dim * self.num_heads != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {self.num_heads})."
+            )
+        
+        # The 1.0 is pct of the head_dim to use for rotary embedding
+        self.rotary_ndims = int(self.head_dim * 1.0)
+        self.max_positions = max_positions
+        self.rotary_emb = GPTNeoXRotaryEmbedding(self.rotary_ndims, max_positions, base=10000)
+
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
+        self.ELU = nn.ELU()
+        self.betas = nn.Parameter(torch.randn(1, self.num_heads, 1, 1))
+        # needs to become num_heads, head_dim, head_dim
+        self.mem = torch.zeros((self.num_heads,self.head_dim, self.head_dim))
+        self.z = torch.zeros((self.num_heads, self.head_dim, 1))
+        # needs to become num_heads, head_dim, 1
+        # self.register_buffer("mem", torch.zeros((self.num_heads,self.head_dim, self.head_dim)))
+        # self.register_buffer("z", torch.zeros((self.num_heads, self.head_dim, 1)))
+        self.segment_size = self.max_positions
+    
+
+
+    def _split_heads(self, tensor, num_heads, attn_head_size):
+        """
+        Splits hidden_size dim into attn_head_size and num_heads
+        """
+        new_shape = tensor.size()[:-1] + (num_heads, attn_head_size)
+        tensor = tensor.view(new_shape)
+        return tensor.permute(0, 2, 1, 3)  # (batch, head, seq_length, head_features)
+
+    def _merge_heads(self, tensor, num_heads, attn_head_size):
+        """
+        Merges attn_head_size dim and num_attn_heads dim into hidden_size
+        """
+        tensor = tensor.permute(0, 2, 1, 3).contiguous()
+        new_shape = tensor.size()[:-2] + (num_heads * attn_head_size,)
+        return tensor.view(new_shape)
+
+    def _attn(self, query, key, value, mem, z, attention_mask=None, head_mask=None):
+        # Keep the attention weights computation in fp32 to avoid overflow issues
+        query = query.to(torch.float32)
+        key = key.to(torch.float32)
+
+        # At the limit K goes over and Q resets
+
+        attn_weights = torch.matmul(query, key.transpose(-1, -2))
+
+        device = attn_weights.device
+
+        # We introduce our non-linearity
+        sigma_q = self.ELU(query) + 1.0
+        sigma_k = self.ELU(key) + 1.0
+
+        mem = mem.detach().to(device)
+        z = z.detach().to(device)
+    
+        # We retrieve from memory before we add to it
+        A_mem = ((torch.matmul(sigma_q, mem)) / ((torch.matmul(sigma_q, z)) + 1e-6))
+
+        query_length, key_length = query.size(-2), key.size(-2)
+        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
+        mask_value = torch.finfo(attn_weights.dtype).min
+        # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
+        # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
+        mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
+        attn_weights = torch.where(causal_mask, attn_weights, mask_value)
+
+        if attention_mask.size(-1) > 64:
+            attention_mask = attention_mask[:, :, -64:, -64:]
+
+        if attention_mask is not None:
+            # Apply the attention mask
+            attn_weights = attn_weights + attention_mask
+
+        # Vanilla A_dot local attention
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+
+        attn_weights = attn_weights.to(value.dtype)
+        attn_weights = self.attn_dropout(attn_weights)
+
+        # Mask heads if we want to
+        if head_mask is not None:
+            attn_weights = attn_weights * head_mask
+
+        attn_output = torch.matmul(attn_weights, value)
+
+        attn_output = F.sigmoid(self.betas) * A_mem + (torch.ones(1, 4, 1, 1).to(device) - F.sigmoid(self.betas)) * attn_output
+
+        delta = torch.matmul(sigma_k, mem) / (torch.matmul(sigma_k, z) + 1e-6)
+
+        # This is questionable, I'm not sure if it's correct to mean over the whole batch
+        mem = mem + torch.matmul(sigma_k.transpose(-2, -1), value - delta).mean(dim=0)
+        z_update = (sigma_k.sum(dim=2, keepdim=True)).mean(dim=0)
+        z_update = z_update.permute(0, 2, 1)
+
+        z = z + z_update
+        
+        return attn_output, attn_weights, mem, z
+    def reset_mem(self):
+        self.mem.zero_()
+        self.z.zero_()
+
+    def forward(
+        self,
+        hidden_states,
+        position_ids,
+        attention_mask=None,
+        layer_past=None,
+        head_mask=None,
+        use_cache=False,
+        output_attentions=False,
+    ):  
+
+        
+        if hidden_states.size(-2) > 64:
+            hidden_states = hidden_states[:, -64:, :]
+        has_layer_past = layer_past is not None
+
+        query = self.q_proj(hidden_states)
+        key = self.k_proj(hidden_states)
+        value = self.v_proj(hidden_states)
+
+        mem = self.mem
+        z = self.z
+        query = self._split_heads(query, self.num_heads, self.head_dim)
+        key = self._split_heads(key, self.num_heads, self.head_dim)
+        value = self._split_heads(value, self.num_heads, self.head_dim)
+
+        # Compute rotary embeddings on rotary_ndims
+        query_rot = query[..., : self.rotary_ndims]
+        query_pass = query[..., self.rotary_ndims :]
+        key_rot = key[..., : self.rotary_ndims]
+        key_pass = key[..., self.rotary_ndims :]
+
+        # Compute token offset for rotary embeddings (when decoding)
+        seq_len = key.shape[-2]
+        if has_layer_past:
+            seq_len += layer_past[0].shape[-2]
+        cos, sin = self.rotary_emb(value, seq_len=seq_len)
+
+        query, key = apply_rotary_pos_emb(query_rot, key_rot, cos, sin, position_ids)
+        query = torch.cat((query, query_pass), dim=-1)
+        key = torch.cat((key, key_pass), dim=-1)
+        if layer_past is not None:
+            past_key = layer_past[0]
+            past_value = layer_past[1]
+            key = torch.cat((past_key, key), dim=-2)
+            value = torch.cat((past_value, value), dim=-2)
+        if key.size(-2) > 64:
+            key = key[:, :, -64:, :]
+        if value.size(-2) > 64:
+            value = value[:, :, -64:, :]
+
+        if use_cache is True:
+            present = (key, value)
+        else:
+            present = None
+
+        attn_output, attn_weights, mem, z = self._attn(query, key, value, mem, z, attention_mask, head_mask)
+        self.mem = mem
+        self.z = z
+
+        attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)
+        attn_output = self.out_proj(attn_output)
+        attn_output = self.resid_dropout(attn_output)
+
+        outputs = (attn_output, present)
+        if output_attentions:
+            outputs += (attn_weights,)
+
+        return outputs  # a, present, (attentions)
+from torch import nn
+import torch
+
+# Copied from https://github.com/huggingface/transformers/blob/v4.41.0/src/transformers/models/gpt_neox/modeling_gpt_neox.py#L563
+class GPTNeoXRotaryEmbedding(nn.Module):
+    # Copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding.__init__
+    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
+        super().__init__()
+
+        self.dim = dim
+        self.max_position_embeddings = max_position_embeddings
+        self.base = base
+        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.float32).float().to(device) / self.dim))
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+
+        # Build here to make `torch.jit.trace` work.
+        self._set_cos_sin_cache(
+            seq_len=max_position_embeddings, device=self.inv_freq.device, dtype=torch.get_default_dtype()
+        )
+
+    def _set_cos_sin_cache(self, seq_len, device, dtype):
+        self.max_seq_len_cached = seq_len
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.float32).type_as(self.inv_freq)
+
+        freqs = torch.einsum('i,j->ij', t, self.inv_freq)
+        # Different from paper, but it uses a different permutation in order to obtain the same calculation
+        emb = torch.cat((freqs, freqs[:, :self.dim//2]), dim=-1)
+        self.register_buffer("cos_cached", emb.cos(), persistent=False)
+        self.register_buffer("sin_cached", emb.sin(), persistent=False)
+
+    def forward(self, x, seq_len=None):
+        # x: [bs, num_attention_heads, seq_len, head_size]
+        if seq_len > self.max_seq_len_cached:
+            self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
+        return (
+            self.cos_cached[:seq_len],
+            self.sin_cached[:seq_len],
+        )
+    
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+# Copied from transformers.models.mistral.modeling_mistral.apply_rotary_pos_emb
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        position_ids (`torch.Tensor`):
+            The position indices of the tokens corresponding to the query and key tensors. For example, this can be
+            used to pass offsetted position ids when working with a KV-cache.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+
+    cos = cos[position_ids].unsqueeze(unsqueeze_dim)
+    sin = sin[position_ids].unsqueeze(unsqueeze_dim)
+
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed

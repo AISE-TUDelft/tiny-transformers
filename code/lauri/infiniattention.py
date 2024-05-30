@@ -52,14 +52,12 @@ class InfiniAttention(nn.Module):
         self.ELU = nn.ELU()
         self.betas = nn.Parameter(torch.randn(1, self.num_heads, 1, 1))
         # needs to become num_heads, head_dim, head_dim
-        self.register_buffer("mem", torch.zeros((self.num_heads,self.head_dim, self.head_dim)))
-        # self.mem = torch.zeros((self.num_heads,self.head_dim, self.head_dim))
-        # self.z = torch.zeros((self.num_heads, self.head_dim, 1))
+        self.mem = torch.zeros((self.num_heads,self.head_dim, self.head_dim))
+        self.z = torch.zeros((self.num_heads, self.head_dim, 1))
         # needs to become num_heads, head_dim, 1
-        self.register_buffer("z", torch.zeros((self.num_heads, self.head_dim, 1)))
-
-
-        self.segment_size = 512
+        # self.register_buffer("mem", torch.zeros((self.num_heads,self.head_dim, self.head_dim)))
+        # self.register_buffer("z", torch.zeros((self.num_heads, self.head_dim, 1)))
+        self.segment_size = self.max_positions
     
 
 
@@ -83,7 +81,11 @@ class InfiniAttention(nn.Module):
         # Keep the attention weights computation in fp32 to avoid overflow issues
         query = query.to(torch.float32)
         key = key.to(torch.float32)
+
+        # At the limit K goes over and Q resets
+
         attn_weights = torch.matmul(query, key.transpose(-1, -2))
+        print("attn_weights", attn_weights.size())
         device = attn_weights.device
 
         # We introduce our non-linearity
@@ -92,29 +94,28 @@ class InfiniAttention(nn.Module):
 
         mem = mem.detach().to(device)
         z = z.detach().to(device)
-
+    
         # We retrieve from memory before we add to it
         A_mem = ((torch.matmul(sigma_q, mem)) / ((torch.matmul(sigma_q, z)) + 1e-6))
-        # print("A_mem[0][0]", A_mem[0][0][0][:3])
+
         query_length, key_length = query.size(-2), key.size(-2)
         causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
         mask_value = torch.finfo(attn_weights.dtype).min
         # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
         # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
         mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
-        # print("causal_mask", causal_mask.size())
-        # print("attn_weights", attn_weights.size())
-        #For some reason attn_weights size keeps growing when causal_mask caps at 512
-
         attn_weights = torch.where(causal_mask, attn_weights, mask_value)
 
+        if attention_mask.size(-1) > 64:
+            attention_mask = attention_mask[:, :, -64:, -64:]
+        print("attention_mask", attention_mask.size())
         if attention_mask is not None:
             # Apply the attention mask
             attn_weights = attn_weights + attention_mask
 
         # Vanilla A_dot local attention
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-        # print("A_dot size", attn_weights.size())
+
         attn_weights = attn_weights.to(value.dtype)
         attn_weights = self.attn_dropout(attn_weights)
 
@@ -134,16 +135,11 @@ class InfiniAttention(nn.Module):
         z_update = z_update.permute(0, 2, 1)
 
         z = z + z_update
-        # print("mem", mem.size())
-        # print("z", z.size())
-        # print("sigma_q", sigma_q.size())
-        # print("sigma_k", sigma_k[0][0][0][:3])
-        # print("mem[0][0]", mem[0][0][:3])
-        # print("z[0][0]", z[0][0][:3])
+        
         return attn_output, attn_weights, mem, z
     def reset_mem(self):
-        self.mem.zero()
-        self.z.zero()
+        self.mem.zero_()
+        self.z.zero_()
 
     def forward(
         self,
@@ -156,15 +152,17 @@ class InfiniAttention(nn.Module):
         output_attentions=False,
     ):  
 
+        
+        if hidden_states.size(-2) > 64:
+            hidden_states = hidden_states[:, -64:, :]
         has_layer_past = layer_past is not None
-
+        print("pos ids", position_ids.size())
         query = self.q_proj(hidden_states)
         key = self.k_proj(hidden_states)
         value = self.v_proj(hidden_states)
 
         mem = self.mem
         z = self.z
-
         query = self._split_heads(query, self.num_heads, self.head_dim)
         key = self._split_heads(key, self.num_heads, self.head_dim)
         value = self._split_heads(value, self.num_heads, self.head_dim)
@@ -181,16 +179,18 @@ class InfiniAttention(nn.Module):
             seq_len += layer_past[0].shape[-2]
         cos, sin = self.rotary_emb(value, seq_len=seq_len)
 
-
         query, key = apply_rotary_pos_emb(query_rot, key_rot, cos, sin, position_ids)
         query = torch.cat((query, query_pass), dim=-1)
         key = torch.cat((key, key_pass), dim=-1)
-
         if layer_past is not None:
             past_key = layer_past[0]
             past_value = layer_past[1]
             key = torch.cat((past_key, key), dim=-2)
             value = torch.cat((past_value, value), dim=-2)
+        if key.size(-2) > 64:
+            key = key[:, :, -64:, :]
+        if value.size(-2) > 64:
+            value = value[:, :, -64:, :]
 
         if use_cache is True:
             present = (key, value)
@@ -208,5 +208,5 @@ class InfiniAttention(nn.Module):
         outputs = (attn_output, present)
         if output_attentions:
             outputs += (attn_weights,)
-
+        print("attn_output", attn_output.size())
         return outputs  # a, present, (attentions)

@@ -2,9 +2,9 @@ import os, sys, subprocess, json, torch, wandb, pandas as pd, traceback, time
 from tqdm.contrib.concurrent import process_map
 
 
-MODEL_DIR       = 'models/baseline'
+MODEL_DIR       = '/Users/laurikeskull/Documents/Programming/tiny-transformers/code/lauri/results/infini_baseline'
 N_CUDA_DEVICES  = torch.cuda.device_count()
-ENV_NAME        = 'babylm'
+ENV_NAME        = 'babylm3'
 
 
 TASKS = {
@@ -259,6 +259,7 @@ if __name__ == '__main__':
         } for i, model in 
             enumerate(reversed(sorted(os.listdir(MODEL_DIR))))
     ]
+    print("MODELS@@@@@@@@@@@@@@@@@", models)
 
     # evaluate and aggregate scores for all models 
     results = [eval_and_aggregate(**model) for model in models]
