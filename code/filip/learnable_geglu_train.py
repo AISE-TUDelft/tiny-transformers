@@ -63,14 +63,14 @@ config_rob = dict(
 config_gpt = GPTNeoConfig(**config_gpt)
 config_rob = RobertaConfig(**config_rob)
 
-# implement learnable GELU activation function
+# implement learnable GEGLU activation function
 
 import torch
 from torch import nn, Tensor
 import math
 
 
-class LearnableGELU(nn.Module):
+class LearnableGEGLU(nn.Module):
     def __init__(self, num_parameters: int = 1, init: float = 1.0,
                  device=None, dtype=None) -> None:
         factory_kwargs = {'device': device, 'dtype': dtype}
@@ -84,18 +84,19 @@ class LearnableGELU(nn.Module):
         torch.nn.init.constant_(self.beta, self.init)
 
     def forward(self, input: Tensor) -> Tensor:
-        # Apply the learnable GELU function
-        return 0.5 * self.beta * input * (1.0 + torch.tanh(math.sqrt(2.0 / math.pi) * (input + 0.044715 * torch.pow(input, 3.0))))
+        x, gate = input.chunk(2, dim=-1)
+        x = x * 0.5 * self.beta * gate * (1.0 + torch.tanh(math.sqrt(2.0 / math.pi) * (gate + 0.044715 * torch.pow(gate, 3.0))))
+        return x
 
 
-# Fix MLP for GPT-Neo with Learnable GELU
-class NeoLearnableGELUMLP(nn.Module):
+# Fix MLP for GPT-Neo with Learnable GEGLU
+class NeoLearnableGEGLUMLP(nn.Module):
     def __init__(self, intermediate_size, config):
         super().__init__()
         embed_dim = config.hidden_size
-        self.c_fc = nn.Linear(embed_dim, intermediate_size)
+        self.c_fc = nn.Linear(embed_dim, intermediate_size * 2) # to match size for GeGLU
         self.c_proj = nn.Linear(intermediate_size, embed_dim)
-        self.act = LearnableGELU(num_parameters=intermediate_size, init=1.0)
+        self.act = LearnableGEGLU(num_parameters=intermediate_size, init=1.0)
         self.dropout = nn.Dropout(float(config.resid_dropout))
 
     def forward(self, hidden_states):
@@ -106,11 +107,11 @@ class NeoLearnableGELUMLP(nn.Module):
         return hidden_states
     
 # Fix MLP for RoBERTa with Learnable GELU
-class RobertaLearnableGELUMLP(nn.Module):
+class RobertaLearnableGEGLUMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.intermediate_act_fn = LearnableGELU(num_parameters=config.intermediate_size, init=1.0)
+        self.dense = nn.Linear(config.hidden_size, config.intermediate_size * 2)
+        self.intermediate_act_fn = LearnableGEGLU(num_parameters=config.intermediate_size, init=1.0)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
@@ -121,19 +122,19 @@ class CustomGPTNeoForCausalLM(GPTNeoForCausalLM):
     def __init__(self, config, act_implementation=None):
         super().__init__(config)
         
-        if act_implementation == "LEARNABLE_GELU":
+        if act_implementation == "LEARNABLE_GEGLU":
             # Override MLP with KAN in each transformer block
             for block in self.transformer.h:
-                block.mlp = NeoLearnableGELUMLP(config.intermediate_size, config)
+                block.mlp = NeoLearnableGEGLUMLP(config.intermediate_size, config)
 
 class CustomRobertaForMaskedLM(RobertaForMaskedLM):
     def __init__(self, config, act_implementation=None):
         super().__init__(config)
         
-        if act_implementation == "LEARNABLE_GELU":
+        if act_implementation == "LEARNABLE_GEGLU":
             # Override MLP with KAN in each transformer block
             for layer in self.roberta.encoder.layer:
-                layer.intermediate = RobertaLearnableGELUMLP(config)
+                layer.intermediate = RobertaLearnableGEGLUMLP(config)
 
 import random, numpy as np                
 def set_all_seeds(seed=42):
@@ -145,8 +146,8 @@ def set_all_seeds(seed=42):
     torch.cuda.manual_seed_all(seed)
 set_all_seeds(seed=seed)
 
-gpt = CustomGPTNeoForCausalLM(config=config_gpt, act_implementation="LEARNABLE_GELU")
-rob = CustomRobertaForMaskedLM(config=config_rob, act_implementation="LEARNABLE_GELU")
+gpt = CustomGPTNeoForCausalLM(config=config_gpt, act_implementation="LEARNABLE_GEGLU")
+rob = CustomRobertaForMaskedLM(config=config_rob, act_implementation="LEARNABLE_GEGLU")
 
 print(f'''
     This GPT has {gpt.num_parameters():,} parameters,
@@ -204,7 +205,7 @@ def get_hyperparameters(model, dataset):
     # TODO: customise this name such that every model you train has a unique identifier!
     config      = model.config 
     model_name  = '-'.join([
-        f'GPT-Learnable-GELU-seed{seed}' if isinstance(model, GPTNeoForCausalLM) else f'BERT-Learnable-GELU-seed{seed}',
+        f'GPT-Learnable-GEGLU-seed{seed}' if isinstance(model, GPTNeoForCausalLM) else f'BERT-Learnable-GEGLU-seed{seed}',
         f'{model.num_parameters()//1e6:.1f}M',
         f'{config.num_layers if isinstance(model, GPTNeoForCausalLM) else config.num_hidden_layers}L', 
         f'{config.num_heads if isinstance(model, GPTNeoForCausalLM) else config.num_attention_heads}H', 
@@ -282,7 +283,7 @@ def get_trainer(
     return trainer
 
 # %%
-out_dir = './results2/models_learnable_gelu_seeds/' 
+out_dir = './results2/models_learnable_geglu_seeds/' 
 
 trainer_gpt = get_trainer(gpt, tok_gpt, train_dataset, eval_dataset, out_dir, **params_gpt)
 trainer_rob = get_trainer(rob, tok_rob, train_dataset, eval_dataset, out_dir, **params_rob)
@@ -292,6 +293,9 @@ def do_train(trainer: Trainer, name: str, out_dir: str):
     wandb.init(project='tiny-transformers', name=name, group='learnable_gelu', config=trainer.args)
     trainer.train()
     trainer.save_model(os.path.join(out_dir, name))
+    
+    trained_model = trainer.model
+    torch.save(trained_model.state_dict(), f'./results2/models_learnable_geglu_seeds/{name}/model_state.pt')
 
     del trainer.model
     del trainer
@@ -306,5 +310,3 @@ len(train_dataset['text'][11]), len(train_dataset[11]['input_ids'])
 do_train(trainer_gpt, params_gpt['model_name'], out_dir)
 
 do_train(trainer_rob, params_rob['model_name'], out_dir)
-
-
