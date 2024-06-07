@@ -138,7 +138,7 @@ class SparseGPTNeoConfig(PretrainedConfig):
                 "Please verify the value of `config.attention_types` argument."
             )
 
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, pad_token_id=pad_token_id, **kwargs)
+        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, pad_token_id = pad_token_id, **kwargs)
 
     @staticmethod
     def expand_attention_types_params(attention_types):
