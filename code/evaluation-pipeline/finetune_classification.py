@@ -49,10 +49,11 @@ from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
 
+
 import sys
-sys.path.append("..")
-from eugene import sparse_gpt_neo
-from eugene import sparse_roberta
+sys.path.append("../eugene")
+import sparse_gpt_neo
+import sparse_roberta
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 # check_min_version("4.27.0.dev0")

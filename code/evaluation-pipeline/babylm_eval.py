@@ -4,9 +4,9 @@ import os
 import json
 
 import sys
-sys.path.append("..")
-from eugene import sparse_gpt_neo
-from eugene import sparse_roberta
+sys.path.append("../eugene")
+import sparse_gpt_neo
+import sparse_roberta
 
 TASKS = {
     "blimp": ["anaphor_agreement.json", "argument_structure.json", "binding.json",
