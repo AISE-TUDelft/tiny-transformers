@@ -8,34 +8,36 @@ DEBUG = len(sys.argv) > 1 and sys.argv[1] == 'debug'
 if DEBUG: TEST = True 
 else: wandb.login()
 
-from typing import Any
+from dataclasses import dataclass
 from datasets import load_from_disk, load_dataset
 from transformers import (
     RobertaForMaskedLM, RobertaConfig, RobertaTokenizerFast,
     GPTNeoForCausalLM, GPTNeoConfig, GPT2TokenizerFast,
-    PreTrainedTokenizer, PretrainedConfig,
     Trainer, TrainingArguments, DataCollatorForLanguageModeling,
     set_seed
 )
 
 # cheeky library i wrote; feel free to use anything else as well. 
-from grid_search import GridSearch, search 
-from dataclasses import dataclass
-from eval_baselines import eval_and_aggregate
+from .grid_search import GridSearch, search 
+from .eval_baselines import eval_and_aggregate
 
-def get_dataset():
+def get_dataset(context_length=512, debug=False):
+
+    num_proc = 5 if debug else 64
 
     if os.path.exists('./tokenized_dataset'):
-        return load_from_disk(f'./tokenized_dataset', keep_in_memory=True)
+        dataset = load_from_disk(f'./tokenized_dataset', keep_in_memory=True)
 
-    tok_gpt = GPT2TokenizerFast.from_pretrained('10k-tok')
+    else: 
+        tok_gpt = GPT2TokenizerFast.from_pretrained('10k-tok')
+        tok_gpt.model_max_length = context_length
 
-    dataset = load_dataset('roneneldan/tinystories', num_proc=16)
-    dataset = dataset.map(
-        lambda x: tok_gpt(x['text'], truncation=True, padding='max_length'),
-        batched=True, num_proc=64, batch_size=1_000)                 # change num_proc to 1 if multithread issues
+        dataset = load_dataset('roneneldan/tinystories', num_proc=16)
+        dataset = dataset.map(
+            lambda x: tok_gpt(x['text'], truncation=True, padding='max_length'),
+            batched=True, num_proc=num_proc, batch_size=1_000)                 # change num_proc to 1 if multithread issues
 
-    dataset.save_to_disk('./tokenized_dataset', num_proc=5)
+        dataset.save_to_disk('./tokenized_dataset', num_proc=5)
     return dataset
 
 
@@ -190,7 +192,7 @@ class Hyperparams(GridSearch):
             train_dataset       = train_ds,
             eval_dataset        = eval_ds,
             data_collator       = DataCollatorForLanguageModeling(
-                tokenizer, mlm=isinstance(tokenizer, RobertaForMaskedLM)),
+                tokenizer, mlm=isinstance(tokenizer, RobertaTokenizerFast)),
         )
 
         # print amount of training steps, and how often the model is evaluated

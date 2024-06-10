@@ -79,11 +79,17 @@ class GridSearch(Surface):
         for k,v in self.__dict__.items(): 
             # in case of a multiline value (from a Surface), we pad the block
             v_string = '\n    '.join(str(v).splitlines()) 
-            n_combinations = f'\033[95m{len(v) if hasattr(v, "__len__") else 1}\033[0m'
-            # string += f'\n  {n} \033[1m{k:s}\033[0m: [{v_string}]'
-            string += '\n  {} \033[1m{:{}s}\033[0m: [{}]'.format(
-                n_combinations, k, max_k_len, v_string
-            )
+
+            if isinstance(v, Dimension) or isinstance(v, Surface):
+                n_combinations = f'\033[95m{len(v)}\033[0m'
+                string += '\n  {} \033[1m{:{}s}\033[0m: \033[95;1m[\033[0m{}\033[95;1m]\033[0m'.format(
+                    n_combinations, k, max_k_len, v_string
+                )
+            else:
+                n_combinations = '1'
+                string += '\n  {} \033[1m{:{}s}\033[0m: {}'.format(
+                    n_combinations, k, max_k_len, v_string
+                )
 
         return string + '\n'
 
@@ -112,10 +118,10 @@ class GridSearch(Surface):
     @property 
     def __static_points(self) -> Dict[str, Any] :
         ''' dictionary of { var_one: Any, var_two: Any, ... } '''
-        return {k:v for k,v in self.__dict__.items() if not isinstance(v, Dimension)}
+        return {k:v for k,v in self.__dict__.items() if not isinstance(v, Dimension) and not isinstance(v,Surface)}
 
     @property 
     def __dimensions(self) -> Dict[str, Dimension]:
         ''' dictionary of { var_one: Dimension, var_two: Dimension, ... } '''
-        return {k:v for k,v in self.__dict__.items() if isinstance(v,Dimension)}
+        return {k:v for k,v in self.__dict__.items() if isinstance(v,Dimension) or isinstance(v,Surface)}
 
