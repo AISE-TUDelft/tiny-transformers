@@ -49,13 +49,22 @@ from transformers.utils import (
     is_torch_fx_available,
     logging,
 )
-from transformers.models.gpt_neo.configuration_gpt_neo import GPTNeoConfig
+from transformers.models.gpt_neo.configuration_gpt_neo import GPTNeoConfig as og_GPTNeoConfig
+from dataclasses import dataclass
 
 # NOTE: take the rotary embeddings (3 different variants) from GPT-NeoX
 from transformers.models.gpt_neox.modeling_gpt_neox import (
     GPTNeoXDynamicNTKScalingRotaryEmbedding, GPTNeoXLinearScalingRotaryEmbedding, GPTNeoXRotaryEmbedding,
     rotate_half, apply_rotary_pos_emb, 
 )
+
+class GPTNeoConfig(og_GPTNeoConfig):
+
+    def __init__(self, rotary_pct=0.25, rotary_emb_base=10_000, rope_scaling=None, **kwargs):
+        super().__init__(**kwargs)
+        self.rotary_pct = rotary_pct
+        self.rotary_emb_base = rotary_emb_base
+        self.rope_scaling = rope_scaling
 
 # NOTE: modify Self-Attention to work with RoPE 
 class GPTNeoSelfAttention(nn.Module):
@@ -64,26 +73,8 @@ class GPTNeoSelfAttention(nn.Module):
         super().__init__()
         self.config = config
 
-        # max_positions = config.max_position_embeddings
-        # bias = torch.tril(torch.ones((max_positions, max_positions), dtype=bool)).view(
-        #     1, 1, max_positions, max_positions
-        # )
-
-        # local causal self attention is a sliding window where each token can only attend to the previous
-        # window_size tokens. This is implemented by updating the causal mask such that for each token
-        # all other tokens are masked except the previous window_size tokens.
-        if attention_type == "local":
-            bias = torch.bitwise_xor(bias, torch.tril(bias, -config.window_size))
-
-        self.register_buffer("bias", bias, persistent=False)
-        self.register_buffer("masked_bias", torch.tensor(-1e9), persistent=False)
-
-        self.attn_dropout = nn.Dropout(float(config.attention_dropout))
-        self.resid_dropout = nn.Dropout(float(config.resid_dropout))
-        self.is_causal = True
-
-        self.embed_dim = config.hidden_size
         self.num_heads = config.num_heads
+        self.embed_dim = config.hidden_size
         self.head_dim = self.embed_dim // self.num_heads
         if self.head_dim * self.num_heads != self.embed_dim:
             raise ValueError(
@@ -91,10 +82,36 @@ class GPTNeoSelfAttention(nn.Module):
                 f" {self.num_heads})."
             )
 
+        self.rotary_ndims = int(self.head_dim * config.rotary_pct)
+
+        self._init_bias(config.max_position_embeddings, attention_type)
+        self.register_buffer("masked_bias", torch.tensor(-1e9), persistent=False)
+        self._init_rope()
+
+        self.attn_dropout = nn.Dropout(float(config.attention_dropout))
+        self.resid_dropout = nn.Dropout(float(config.resid_dropout))
+        self.is_causal = True
+
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
+
+    # NOTE: created to be more similar to GPT-NeoX
+    def _init_bias(self, max_position_embeddings, attention_type='global'):
+
+        max_positions = max_position_embeddings
+        bias = torch.tril(torch.ones(size=(max_positions, max_positions), dtype=torch.bool)).view(
+            1, 1, max_positions, max_positions
+        )
+
+        # local causal self attention is a sliding window where each token can only attend to the previous
+        # window_size tokens. This is implemented by updating the causal mask such that for each token
+        # all other tokens are masked except the previous window_size tokens.
+        if attention_type == "local":
+            bias = torch.bitwise_xor(bias, torch.tril(bias, -self.config.window_size))
+
+        self.register_buffer("bias", bias, persistent=False)
 
     # NOTE: copied from modeling_gpt_neox.py
     def _init_rope(self):
@@ -121,7 +138,6 @@ class GPTNeoSelfAttention(nn.Module):
                 )
             else:
                 raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
-
 
     def _split_heads(self, tensor, num_heads, attn_head_size):
         """
@@ -178,6 +194,7 @@ class GPTNeoSelfAttention(nn.Module):
         head_mask=None,
         use_cache=False,
         output_attentions=False,
+        position_ids=None,
     ):
         query = self.q_proj(hidden_states)
         key = self.k_proj(hidden_states)
@@ -187,17 +204,32 @@ class GPTNeoSelfAttention(nn.Module):
         key = self._split_heads(key, self.num_heads, self.head_dim)
         value = self._split_heads(value, self.num_heads, self.head_dim)
 
+        # NOTE: from modeling_gpt_neox.py
+        # Compute rotary embeddings on rotary_ndims
+        query_rot = query[..., : self.rotary_ndims]
+        query_pass = query[..., self.rotary_ndims :]
+        key_rot = key[..., : self.rotary_ndims]
+        key_pass = key[..., self.rotary_ndims :]
+
+        # NOTE: from modeling_gpt_neox.py 
+        # Compute token offset for rotary embeddings (when decoding)
+        seq_len = key.shape[-2]
+        if layer_past is not None: 
+            seq_len += layer_past[0].shape[-2]
+        cos, sin = self.rotary_emb(value, seq_len=seq_len)
+        query, key = apply_rotary_pos_emb(query_rot, key_rot, cos, sin, position_ids)
+        query = torch.cat((query, query_pass), dim=-1)
+        key = torch.cat((key, key_pass), dim=-1)
+
+        # Cache keys and values 
         if layer_past is not None:
             past_key = layer_past[0]
             past_value = layer_past[1]
             key = torch.cat((past_key, key), dim=-2)
             value = torch.cat((past_value, value), dim=-2)
+        present = (key, value) if use_cache else None
 
-        if use_cache is True:
-            present = (key, value)
-        else:
-            present = None
-
+        # Compute attention
         attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
 
         attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)
@@ -546,6 +578,7 @@ class GPTNeoAttention(nn.Module):
         head_mask=None,
         use_cache=False,
         output_attentions=False,
+        position_ids=None,
     ):
         # print(hidden_states.shape, self.attention.__class__.__name__)
         return self.attention(
@@ -555,6 +588,7 @@ class GPTNeoAttention(nn.Module):
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
+            position_ids=position_ids,
         )
 
 class GPTNeoMLP(nn.Module):
@@ -591,6 +625,7 @@ class GPTNeoBlock(nn.Module):
         head_mask=None,
         use_cache=False,
         output_attentions=False,
+        position_ids=None,
     ):
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
@@ -601,6 +636,7 @@ class GPTNeoBlock(nn.Module):
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
+            position_ids=position_ids,
         )
         attn_output = attn_outputs[0]  # output_attn: a, present, (attentions)
         outputs = attn_outputs[1:]
@@ -743,7 +779,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
 
         self.embed_dim = config.hidden_size
         self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
-        self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
+        # self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
         self.drop = nn.Dropout(float(config.embed_dropout))
         self.h = nn.ModuleList([GPTNeoBlock(config, layer_id=i) for i in range(config.num_layers)])
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
@@ -820,8 +856,9 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)
-        position_embeds = self.wpe(position_ids)
-        hidden_states = inputs_embeds + position_embeds
+        # position_embeds = self.wpe(position_ids)
+        # hidden_states = inputs_embeds + position_embeds
+        hidden_states = inputs_embeds
 
         # Attention mask.
         if self._use_flash_attention_2:
@@ -849,6 +886,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         presents = () if use_cache else None
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
+
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -862,6 +900,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
                     head_mask[i],
                     use_cache,
                     output_attentions,
+                    position_ids,
                 )
             else:
                 outputs = block(
@@ -871,6 +910,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
                     head_mask=head_mask[i],
                     use_cache=use_cache,
                     output_attentions=output_attentions,
+                    position_ids=position_ids,
                 )
 
             hidden_states = outputs[0]
