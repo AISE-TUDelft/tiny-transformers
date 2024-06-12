@@ -8,6 +8,7 @@ from transformers import (
 )
 
 small_dataset = True
+seed = 42
 if len(sys.argv) > 1 and (sys.argv[1] == 'True' or sys.argv[1] == 'true'):
     small_dataset = True
     print("Using small dataset")
@@ -16,6 +17,15 @@ elif len(sys.argv) > 1 and (sys.argv[1] == 'False' or sys.argv[1] == 'false'):
     print("Using large dataset")
 else:
     print("Using small dataset")
+
+if len(sys.argv) > 2:
+    try:
+        seed = int(sys.argv[2])
+        print(f"Seed set to {seed}")
+    except ValueError:
+        print("Invalid seed value, using default (42)")
+print(f"Small dataset: {small_dataset}")
+print(f"Seed: {seed}")
 
 config_gpt = dict(
 
@@ -194,7 +204,7 @@ def get_hyperparameters(model, dataset):
     # TODO: customise this name such that every model you train has a unique identifier!
     config      = model.config 
     model_name  = '-'.join([
-        'GPT-Swish' if isinstance(model, GPTNeoForCausalLM) else 'BERT-Swish',
+        f'GPT-swish-seed{seed}' if isinstance(model, GPTNeoForCausalLM) else f'BERT-swish-seed{seed}',
         f'{model.num_parameters()//1e6:.1f}M',
         f'{config.num_layers if isinstance(model, GPTNeoForCausalLM) else config.num_hidden_layers}L', 
         f'{config.num_heads if isinstance(model, GPTNeoForCausalLM) else config.num_attention_heads}H', 
@@ -225,7 +235,7 @@ def get_trainer(
 
     training_args = TrainingArguments(
 
-        seed       = 42,
+        seed       = seed,
         use_cpu    = False, # use GPU if available (not necessarily faster on laptops, but Apple's MPS have good support)
 
         output_dir = os.path.join(output_dir, model_name),
@@ -272,14 +282,13 @@ def get_trainer(
     return trainer
 
 # %%
-out_dir = './results/models_swish/' 
+out_dir = './results2/models_swish_seeds/' 
 
 trainer_gpt = get_trainer(gpt, tok_gpt, train_dataset, eval_dataset, out_dir, **params_gpt)
 trainer_rob = get_trainer(rob, tok_rob, train_dataset, eval_dataset, out_dir, **params_rob)
 
-# %%
 def do_train(trainer: Trainer, name: str, out_dir: str): 
-
+    set_all_seeds(seed)
     wandb.init(project='tiny-transformers', name=name, group='swish', config=trainer.args)
     trainer.train()
     trainer.save_model(os.path.join(out_dir, name))

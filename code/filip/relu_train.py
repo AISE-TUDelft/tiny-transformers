@@ -1,14 +1,14 @@
-print('Start')
-import os, random, torch, numpy as np, sys
+import os, sys
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # or "0,1" for multiple GPUs
-print(torch.cuda.is_available())
+
 import wandb; wandb.login()
 from transformers import (
     RobertaForMaskedLM, RobertaConfig, RobertaTokenizerFast,
     GPTNeoForCausalLM, GPTNeoConfig, GPT2TokenizerFast, set_seed
 )
-print('Imports done')
+
 small_dataset = True
+seed = 1
 if len(sys.argv) > 1 and (sys.argv[1] == 'True' or sys.argv[1] == 'true'):
     small_dataset = True
     print("Using small dataset")
@@ -17,6 +17,15 @@ elif len(sys.argv) > 1 and (sys.argv[1] == 'False' or sys.argv[1] == 'false'):
     print("Using large dataset")
 else:
     print("Using small dataset")
+
+if len(sys.argv) > 2:
+    try:
+        seed = int(sys.argv[2])
+        print(f"Seed set to {seed}")
+    except ValueError:
+        print("Invalid seed value, using default (42)")
+print(f"Small dataset: {small_dataset}")
+print(f"Seed: {seed}")
 
 config_gpt = dict(
 
@@ -47,8 +56,8 @@ config_rob = dict(
     # BLOCKS (of course naming is different in roberta :) )
     num_hidden_layers = config_gpt['num_layers'],
     num_attention_heads = config_gpt['num_heads'],
-    intermediate_size=1024,  
-    hidden_act = 'relu', # activation function in FFN                   
+    intermediate_size=1024,
+    hidden_act = 'relu', # activation function in FFN                     
 
     pad_token_id = 0,
 )
@@ -56,6 +65,8 @@ config_rob = dict(
 config_gpt = GPTNeoConfig(**config_gpt)
 config_rob = RobertaConfig(**config_rob)
 
+import torch
+import random, numpy as np                
 def set_all_seeds(seed=42):
 
     set_seed(seed)
@@ -63,8 +74,8 @@ def set_all_seeds(seed=42):
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
+set_all_seeds(seed=seed)
 
-set_all_seeds()
 gpt = GPTNeoForCausalLM(config=config_gpt)
 rob = RobertaForMaskedLM(config=config_rob)
 
@@ -75,14 +86,14 @@ print(f'''
 
 # gpt, rob # uncomment to see model architecture
 
-
+# %%
 from transformers import PreTrainedTokenizer, PretrainedConfig
-print('get tokenizers')
+
 def get_tokenizer_for_config(Tok: PreTrainedTokenizer, config: PretrainedConfig):
 
     tokenizer = Tok.from_pretrained(
-        '10k-tok',                                         # our custom tokenizer
-        model_max_length=config.max_position_embeddings    # sequence length (context window)
+        '10k-tok',                 # our custom tokenizer
+        model_max_length=512       # sequence length (context window)
     )
 
     # we're using our special tokenizer with only 10'000 tokens instead of 50'256
@@ -96,27 +107,7 @@ def get_tokenizer_for_config(Tok: PreTrainedTokenizer, config: PretrainedConfig)
 tok_gpt = get_tokenizer_for_config(GPT2TokenizerFast, config_gpt)
 tok_rob = get_tokenizer_for_config(RobertaTokenizerFast, config_rob)
 
-'''
 # %%
-# NOTE: uncomment to tokenize the dataset (both tokenizers should give identical results)
-
-tokenized_gpt = dataset.map(
-    lambda x: tok_gpt(x['text'], truncation=True, padding='max_length'), 
-    batched=True, num_proc=64, batch_size=1_000)
-
-tokenized_gpt.save_to_disk('./tokenized_dataset', num_proc=5)
-
-# # sanity check that the tokenisers are indeed identical 
-# tokenized_rob = dataset.map(
-#     lambda x: tok_rob(x['text'], truncation=True, padding='max_length'), 
-#     batched=True, num_proc=64, batch_size=1_000)
-
-# for split in ['train', 'validation']:
-#     for sample_gpt, sample_rob in tqdm.tqdm(zip(tokenized_gpt[split], tokenized_rob[split])):
-#         assert sample_gpt == sample_rob
-
-# %%
-'''
 from datasets import load_from_disk 
 tokenized_dataset = load_from_disk(f'./tokenized_dataset_small') if small_dataset else load_from_disk(f'./tokenized_dataset')
 
@@ -144,7 +135,7 @@ def get_hyperparameters(model, dataset):
     # TODO: customise this name such that every model you train has a unique identifier!
     config      = model.config 
     model_name  = '-'.join([
-        'GPT-ReLU' if isinstance(model, GPTNeoForCausalLM) else 'BERT-ReLU',
+        f'GPT-ReLU-seed{seed}' if isinstance(model, GPTNeoForCausalLM) else f'BERT-ReLU-seed{seed}',
         f'{model.num_parameters()//1e6:.1f}M',
         f'{config.num_layers if isinstance(model, GPTNeoForCausalLM) else config.num_hidden_layers}L', 
         f'{config.num_heads if isinstance(model, GPTNeoForCausalLM) else config.num_attention_heads}H', 
@@ -175,7 +166,7 @@ def get_trainer(
 
     training_args = TrainingArguments(
 
-        seed       = 42,
+        seed       = seed,
         use_cpu    = False, # use GPU if available (not necessarily faster on laptops, but Apple's MPS have good support)
 
         output_dir = os.path.join(output_dir, model_name),
@@ -222,20 +213,14 @@ def get_trainer(
     return trainer
 
 # %%
-out_dir = './results/models_static_activations/' 
+out_dir = './results2/models_relu_seeds/' 
 
 trainer_gpt = get_trainer(gpt, tok_gpt, train_dataset, eval_dataset, out_dir, **params_gpt)
 trainer_rob = get_trainer(rob, tok_rob, train_dataset, eval_dataset, out_dir, **params_rob)
 
-# %% [markdown]
-# Finally, we can train. 
-# 
-# This configuration takes ≤24hr to pre-train on my M1 Macbook Air with 16GB RAM. Python takes ≤4GB VRAM at a `batch_size=16` and ≤11GB at `batch_size=64`, though they take the same amount of time to train - likely because this processor is not designed to move that much data in and out of RAM constantly. And tbh, the GPU be lacking. If you decide to go the local-training-route, consider [chai](https://github.com/lvillani/chai) to keep your (Apple) laptop awake – there's probably a windows/linux equivalent too. 
-
-# %%
 def do_train(trainer: Trainer, name: str, out_dir: str): 
-
-    wandb.init(project='tiny-transformers', name=name, group='static-activations', config=trainer.args)
+    set_all_seeds(seed)
+    wandb.init(project='tiny-transformers', name=name, group='relu', config=trainer.args)
     trainer.train()
     trainer.save_model(os.path.join(out_dir, name))
 
@@ -248,7 +233,6 @@ def do_train(trainer: Trainer, name: str, out_dir: str):
 len(train_dataset['text'][11]), len(train_dataset[11]['input_ids'])
 
 # %%
-do_train(trainer_rob, params_rob['model_name'], out_dir)
-
-# %%
 do_train(trainer_gpt, params_gpt['model_name'], out_dir)
+
+do_train(trainer_rob, params_rob['model_name'], out_dir)

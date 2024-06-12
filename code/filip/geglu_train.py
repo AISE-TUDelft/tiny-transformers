@@ -72,8 +72,8 @@ class NeoGeGluMLP(nn.Module):
         super().__init__()
         embed_dim = config.hidden_size
         self.c_fc = nn.Linear(embed_dim, intermediate_size * 2) # to match size for GeGLU
-        self.c_proj = nn.Linear(intermediate_size, embed_dim)
         self.act = GeGLU()
+        self.c_proj = nn.Linear(intermediate_size, embed_dim)
         self.dropout = nn.Dropout(float(config.resid_dropout))
 
     def forward(self, hidden_states):
