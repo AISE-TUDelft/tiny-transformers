@@ -36,7 +36,7 @@ def load_training_data(path="../../data/TokenizedTinyStories", debug = False):
 
 def get_tokenizer_for_config(tok, config):
     tokenizer = tok.from_pretrained(
-        'common/10k-tok',  # our custom tokenizer
+        '../common/10k-tok',  # our custom tokenizer
         model_max_length=512  # sequence length (context window)
     )
 
@@ -49,7 +49,6 @@ def get_tokenizer_for_config(tok, config):
     return tokenizer
 
 def load_tokenizer_and_model(model_type, sparsity_type, sparsity_level):
-    model_name = ""
     if model_type == 'gpt':
         if sparsity_type == 'baseline':
             with open("model_configs/gpt_baseline.json",'r') as config_file:

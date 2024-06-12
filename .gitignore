@@ -3,6 +3,7 @@ code/lauri/10k-gpt-neo
 tokenized_dataset
 tokenized_dataset_small
 wandb
+models/sparse_pretrained
 results
 code/lauri/10k-tok
 code/lauri/requirements.txt

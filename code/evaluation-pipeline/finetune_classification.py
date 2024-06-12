@@ -32,6 +32,7 @@ from sklearn.metrics import f1_score, matthews_corrcoef
 import transformers
 from transformers import (
     AutoConfig,
+    AutoModelForMaskedLM,
     AutoModelForSequenceClassification,
     AutoTokenizer,
     DataCollatorWithPadding,
@@ -52,8 +53,10 @@ from transformers.utils.versions import require_version
 
 import sys
 sys.path.append("../eugene")
-import sparse_gpt_neo
 import sparse_roberta
+import sparse_gpt_neo
+
+
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 # check_min_version("4.27.0.dev0")
