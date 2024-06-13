@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import math
 
 from transformers import RobertaForMaskedLM, RobertaForSequenceClassification
-from transformers import AutoConfig, AutoModelForCausalLM, AutoModelForSequenceClassification
+from transformers import AutoConfig, AutoModelForMaskedLM, AutoModelForSequenceClassification
 from activations_config_roberta import ActivationsRobertaConfig
 
 class LearnableGELU(nn.Module):
@@ -95,7 +95,7 @@ class KANtoMLP(nn.Module):
         x = self.c_proj(x)
         return x
     
-class ActivationsRobertaForCausalLM(RobertaForMaskedLM):
+class ActivationsRobertaForMaskedLM(RobertaForMaskedLM):
     config_class = ActivationsRobertaConfig
     def __init__(self, config: ActivationsRobertaConfig):
         super().__init__(config)
@@ -131,5 +131,5 @@ class ActivationsRobertaForSequenceClassification(RobertaForSequenceClassificati
                 layer.intermediate = KANtoMLP(config.hidden_size, config.intermediate_size)
 
 AutoConfig.register('activations_roberta', ActivationsRobertaConfig)
-AutoModelForCausalLM.register(ActivationsRobertaConfig, ActivationsRobertaForCausalLM)
+AutoModelForMaskedLM.register(ActivationsRobertaConfig, ActivationsRobertaForMaskedLM)
 AutoModelForSequenceClassification.register(ActivationsRobertaConfig, ActivationsRobertaForSequenceClassification)

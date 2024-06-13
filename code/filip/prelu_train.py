@@ -43,6 +43,7 @@ config_gpt = dict(
     num_heads           = 4,                    # attention heads
     window_size         = 256,                  # (GPT-Neo-specific) for local attention 
     intermediate_size   = 1024,                 # size of 'up-projection' layer in FFN
+    custom_activation   = 'prelu',              # custom activation function
 
     pad_token_id = 0,           # need to specify this for tokenizer interop between models
 )
@@ -58,7 +59,8 @@ config_rob = dict(
     # BLOCKS (of course naming is different in roberta :) )
     num_hidden_layers = config_gpt['num_layers'],
     num_attention_heads = config_gpt['num_heads'],
-    intermediate_size=1024,                     
+    intermediate_size=1024,
+    custom_activation = 'prelu',                     
 
     pad_token_id = 0,
 )
@@ -69,7 +71,8 @@ config_rob = RobertaConfig(**config_rob)
 # TODO: implement PReLU activation function
 # REF: https://pytorch.org/docs/stable/generated/torch.nn.PReLU.html#torch.nn.PReLU
 
-import random, numpy as np                
+import random, numpy as np      
+import torch          
 def set_all_seeds(seed=42):
 
     set_seed(seed)
@@ -79,8 +82,8 @@ def set_all_seeds(seed=42):
     torch.cuda.manual_seed_all(seed)
 set_all_seeds()
 
-gpt = ActivationsPTNeoForCausalLM(config=config_gpt, act_implementation="PRELU")
-rob = ActivationsRobertaForMaskedLM(config=config_rob, act_implementation="PRELU")
+gpt = ActivationsGPTNeoForCausalLM(config=config_gpt)
+rob = ActivationsRobertaForMaskedLM(config=config_rob)
 
 print(f'''
     This GPT has {gpt.num_parameters():,} parameters,
