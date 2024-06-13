@@ -17,16 +17,13 @@
 from collections import OrderedDict
 from typing import Any, Mapping, Optional
 
-from ... import PreTrainedTokenizer, TensorType, is_torch_available
-from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfigWithPast
-from ...utils import logging
+from transformers import PreTrainedTokenizer, TensorType, is_torch_available
+from transformers.configuration_utils import PretrainedConfig
+from transformers.onnx import OnnxConfigWithPast
+from transformers.utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-
-from ..deprecated._archive_maps import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class ActivationsGPTNeoConfig(PretrainedConfig):
@@ -101,7 +98,7 @@ class ActivationsGPTNeoConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "gpt_neo_activations"
+    model_type = "activations_gpt_neo"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
 

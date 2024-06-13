@@ -17,15 +17,11 @@
 from collections import OrderedDict
 from typing import Mapping
 
-from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
-from ...utils import logging
-
+from transformers.configuration_utils import PretrainedConfig
+from transformers.onnx import OnnxConfig
+from transformers.utils import logging
 
 logger = logging.get_logger(__name__)
-
-
-from ..deprecated._archive_maps import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class ActivationsRobertaConfig(PretrainedConfig):

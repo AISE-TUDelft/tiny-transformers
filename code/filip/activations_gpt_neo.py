@@ -4,6 +4,7 @@ import math
 
 from transformers import GPTNeoForCausalLM, GPTNeoForSequenceClassification, GPTNeoConfig
 from transformers import AutoConfig, AutoModelForCausalLM, AutoModelForSequenceClassification
+from activations_config_neo import ActivationsGPTNeoConfig
 
 
 class LearnableGELU(nn.Module):
@@ -41,20 +42,23 @@ class NeoLearnableGELUMLP(nn.Module):
         hidden_states = self.dropout(hidden_states)
         return hidden_states
     
-class LearnableGeluGPTNeoForCausalLM(GPTNeoForCausalLM):
+class ActivationsGPTNeoForCausalLM(GPTNeoForCausalLM):
     def __init__(self, config):
         super().__init__(config)
         # Override MLP with KAN in each transformer block
-        for block in self.transformer.h:
-            block.mlp = NeoLearnableGELUMLP(config.intermediate_size, config)
+        if config.activation_function == 'learnable_gelu':
+            for block in self.transformer.h:
+                block.mlp = NeoLearnableGELUMLP(config.intermediate_size, config)
 
-class LearnableGeluGPTNeoForSequenceClassification(GPTNeoForSequenceClassification):
+class ActivationsGPTNeoForSequenceClassification(GPTNeoForSequenceClassification):
     def __init__(self, config):
         super().__init__(config)
         # Override MLP with KAN in each transformer block
-        for block in self.transformer.h:
-            block.mlp = NeoLearnableGELUMLP(config.intermediate_size, config)
+        if config.activation_function == 'learnable_gelu':
+            for block in self.transformer.h:
+                block.mlp = NeoLearnableGELUMLP(config.intermediate_size, config)
 
-AutoModelForCausalLM.register(GPTNeoConfig, LearnableGeluGPTNeoForCausalLM)
+AutoConfig.register('activations_gpt_neo', ActivationsGPTNeoConfig)
+AutoModelForCausalLM.register(ActivationsGPTNeoConfig, ActivationsGPTNeoForCausalLM)
 print('test')
-AutoModelForSequenceClassification.register(GPTNeoConfig, LearnableGeluGPTNeoForCausalLM)
+AutoModelForSequenceClassification.register(ActivationsGPTNeoConfig, ActivationsGPTNeoForSequenceClassification)
