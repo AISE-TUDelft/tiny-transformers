@@ -7,6 +7,9 @@ from transformers import (
     GPTNeoForCausalLM, GPTNeoConfig, GPT2TokenizerFast, set_seed
 )
 
+from activations_gpt_neo import ActivationsGPTNeoForCausalLM
+from activations_roberta import ActivationsRobertaForMaskedLM
+
 small_dataset = True
 seed = 1
 if len(sys.argv) > 1 and (sys.argv[1] == 'True' or sys.argv[1] == 'true'):
@@ -66,57 +69,6 @@ config_rob = RobertaConfig(**config_rob)
 # TODO: implement PReLU activation function
 # REF: https://pytorch.org/docs/stable/generated/torch.nn.PReLU.html#torch.nn.PReLU
 
-import torch
-from torch import nn
-import torch.nn.functional as F
-
-# Fix MLP for GPT-Neo with PReLU
-class NeoPReLUMLP(nn.Module):
-    def __init__(self, intermediate_size, config):  # in MLP: intermediate_size= 4 * hidden_size
-        super().__init__()
-        embed_dim = config.hidden_size
-        self.c_fc = nn.Linear(embed_dim, intermediate_size)
-        self.c_proj = nn.Linear(intermediate_size, embed_dim)
-        self.act = nn.PReLU(num_parameters=intermediate_size // 2, init=0.25)
-        self.dropout = nn.Dropout(float(config.resid_dropout))
-
-    def forward(self, hidden_states):
-        hidden_states = self.c_fc(hidden_states)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.c_proj(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        return hidden_states
-    
-# Fix MLP for RoBERTa with PReLU
-class RobertaPReLUMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.intermediate_act_fn = nn.PReLU(num_parameters=config.intermediate_size // 2, init=0.25)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
-        return hidden_states
-
-class CustomGPTNeoForCausalLM(GPTNeoForCausalLM):
-    def __init__(self, config, act_implementation=None):
-        super().__init__(config)
-        
-        if act_implementation == "PRELU":
-            # Override MLP with KAN in each transformer block
-            for block in self.transformer.h:
-                block.mlp = NeoPReLUMLP(config.intermediate_size, config)
-
-class CustomRobertaForMaskedLM(RobertaForMaskedLM):
-    def __init__(self, config, act_implementation=None):
-        super().__init__(config)
-        
-        if act_implementation == "PRELU":
-            # Override MLP with KAN in each transformer block
-            for layer in self.roberta.encoder.layer:
-                layer.intermediate = RobertaPReLUMLP(config)
-
 import random, numpy as np                
 def set_all_seeds(seed=42):
 
@@ -127,8 +79,8 @@ def set_all_seeds(seed=42):
     torch.cuda.manual_seed_all(seed)
 set_all_seeds()
 
-gpt = CustomGPTNeoForCausalLM(config=config_gpt, act_implementation="PRELU")
-rob = CustomRobertaForMaskedLM(config=config_rob, act_implementation="PRELU")
+gpt = ActivationsPTNeoForCausalLM(config=config_gpt, act_implementation="PRELU")
+rob = ActivationsRobertaForMaskedLM(config=config_rob, act_implementation="PRELU")
 
 print(f'''
     This GPT has {gpt.num_parameters():,} parameters,
