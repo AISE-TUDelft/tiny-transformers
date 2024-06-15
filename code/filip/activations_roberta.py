@@ -37,12 +37,31 @@ class RobertaLearnableGELUMLP(nn.Module):
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
 
+# PyTorch PReLU implementation broken, so we need to reinplement it ourselves. Using the formula from the documentation:
+# PReLU(x)=max(0,x)+a∗min(0,x)
+class CustomPReLU(nn.Module):
+    def __init__(self, num_parameters: int = 1, init: float = 0,
+                 device=None, dtype=None) -> None:
+        factory_kwargs = {'device': device, 'dtype': dtype}
+        self.num_parameters = num_parameters
+        super().__init__()
+        self.init = init
+        self.alpha = nn.Parameter(torch.empty(num_parameters, **factory_kwargs))
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        torch.nn.init.constant_(self.alpha, self.init)
+
+    def forward(self, input: Tensor) -> Tensor:
+        # Apply PReLU function
+        return torch.max(torch.zeros_like(input),input) + self.alpha * torch.min(torch.zeros_like(input),input)
+    
 # Fix MLP for RoBERTa with PReLU
 class RobertaPReLUMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.intermediate_act_fn = nn.PReLU(num_parameters=config.intermediate_size // 2, init=0.25)
+        self.intermediate_act_fn = CustomPReLU(num_parameters=config.intermediate_size, init=0.0)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)

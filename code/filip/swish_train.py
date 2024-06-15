@@ -7,6 +7,11 @@ from transformers import (
     GPTNeoForCausalLM, GPTNeoConfig, GPT2TokenizerFast, set_seed
 )
 
+from activations_roberta import ActivationsRobertaForMaskedLM
+from activations_gpt_neo import ActivationsGPTNeoForCausalLM
+from activations_config_neo import ActivationsGPTNeoConfig
+from activations_config_roberta import ActivationsRobertaConfig
+
 small_dataset = True
 seed = 42
 if len(sys.argv) > 1 and (sys.argv[1] == 'True' or sys.argv[1] == 'true'):
@@ -40,6 +45,7 @@ config_gpt = dict(
     num_heads           = 4,                    # attention heads
     window_size         = 256,                  # (GPT-Neo-specific) for local attention 
     intermediate_size   = 1024,                 # size of 'up-projection' layer in FFN
+    custom_activation   = 'swish',              # custom activation function
 
     pad_token_id = 0,           # need to specify this for tokenizer interop between models
 )
@@ -55,85 +61,20 @@ config_rob = dict(
     # BLOCKS (of course naming is different in roberta :) )
     num_hidden_layers = config_gpt['num_layers'],
     num_attention_heads = config_gpt['num_heads'],
-    intermediate_size=1024,                     
+    intermediate_size=1024,
+    custom_activation = 'swish',                     
 
     pad_token_id = 0,
 )
 
-config_gpt = GPTNeoConfig(**config_gpt)
-config_rob = RobertaConfig(**config_rob)
+config_gpt = ActivationsGPTNeoConfig(**config_gpt)
+config_rob = ActivationsRobertaConfig(**config_rob)
 
 # TODO: implement SWISH activation function
 
 import torch
 from torch import nn
-import torch.nn.functional as F
 
-#REF: http://arxiv.org/abs/1710.05941
-class LearnableSwish(nn.Module):
-    def __init__(self, num_parameters: int = 1, init: float = 0.25,
-                 device=None, dtype=None) -> None:
-        factory_kwargs = {'device': device, 'dtype': dtype}
-        self.num_parameters = num_parameters
-        super().__init__()
-        self.init = init
-        self.beta = nn.Parameter(torch.empty(num_parameters, **factory_kwargs))
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        torch.nn.init.constant_(self.beta, self.init)
-
-    def forward(self, x):
-        # Apply the learnable Swish function
-        return x * F.silu(self.beta * x)
-
-
-# Fix MLP for GPT-Neo with Swish
-class NeoSwishMLP(nn.Module):
-    def __init__(self, intermediate_size, config):  # in MLP: intermediate_size= 4 * hidden_size
-        super().__init__()
-        embed_dim = config.hidden_size
-        self.c_fc = nn.Linear(embed_dim, intermediate_size) # to match size for GeGLU
-        self.c_proj = nn.Linear(intermediate_size, embed_dim)
-        self.act = LearnableSwish(num_parameters=intermediate_size, init=1.0) # according to http://arxiv.org/abs/1710.05941
-        self.dropout = nn.Dropout(float(config.resid_dropout))
-
-    def forward(self, hidden_states):
-        hidden_states = self.c_fc(hidden_states)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.c_proj(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        return hidden_states
-    
-# Fix MLP for RoBERTa with Swish
-class RobertaSwishMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.intermediate_act_fn = LearnableSwish(num_parameters=config.intermediate_size, init=1.0) # according to http://arxiv.org/abs/1710.05941
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
-        return hidden_states
-
-class CustomGPTNeoForCausalLM(GPTNeoForCausalLM):
-    def __init__(self, config, act_implementation=None):
-        super().__init__(config)
-        
-        if act_implementation == "SWISH":
-            # Override MLP with KAN in each transformer block
-            for block in self.transformer.h:
-                block.mlp = NeoSwishMLP(config.intermediate_size, config)
-
-class CustomRobertaForMaskedLM(RobertaForMaskedLM):
-    def __init__(self, config, act_implementation=None):
-        super().__init__(config)
-        
-        if act_implementation == "SWISH":
-            # Override MLP with KAN in each transformer block
-            for layer in self.roberta.encoder.layer:
-                layer.intermediate = RobertaSwishMLP(config)
 
 import random, numpy as np                
 def set_all_seeds(seed=42):
@@ -145,8 +86,8 @@ def set_all_seeds(seed=42):
     torch.cuda.manual_seed_all(seed)
 set_all_seeds()
 
-gpt = CustomGPTNeoForCausalLM(config=config_gpt, act_implementation="SWISH")
-rob = CustomRobertaForMaskedLM(config=config_rob, act_implementation="SWISH")
+gpt = ActivationsGPTNeoForCausalLM(config=config_gpt)
+rob = ActivationsRobertaForMaskedLM(config=config_rob)
 
 print(f'''
     This GPT has {gpt.num_parameters():,} parameters,
@@ -236,7 +177,7 @@ def get_trainer(
     training_args = TrainingArguments(
 
         seed       = seed,
-        use_cpu    = False, # use GPU if available (not necessarily faster on laptops, but Apple's MPS have good support)
+        #use_cpu    = False, # use GPU if available (not necessarily faster on laptops, but Apple's MPS have good support)
 
         output_dir = os.path.join(output_dir, model_name),
 

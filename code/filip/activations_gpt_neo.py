@@ -23,6 +23,25 @@ class LearnableGELU(nn.Module):
     def forward(self, input: Tensor) -> Tensor:
         # Apply the learnable GELU function
         return 0.5 * self.beta * input * (1.0 + torch.tanh(math.sqrt(2.0 / math.pi) * (input + 0.044715 * torch.pow(input, 3.0))))
+    
+# PyTorch PReLU implementation broken, so we need to reinplement it ourselves. Using the formula from the documentation:
+# PReLU(x)=max(0,x)+a∗min(0,x)
+class CustomPReLU(nn.Module):
+    def __init__(self, num_parameters: int = 1, init: float = 0,
+                 device=None, dtype=None) -> None:
+        factory_kwargs = {'device': device, 'dtype': dtype}
+        self.num_parameters = num_parameters
+        super().__init__()
+        self.init = init
+        self.alpha = nn.Parameter(torch.empty(num_parameters, **factory_kwargs))
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        torch.nn.init.constant_(self.alpha, self.init)
+
+    def forward(self, input: Tensor) -> Tensor:
+        # Apply PReLU function
+        return torch.max(torch.zeros_like(input),input) + self.alpha * torch.min(torch.zeros_like(input),input)
 
 
 # Fix MLP for GPT-Neo with Learnable GELU
@@ -49,7 +68,7 @@ class NeoPReLUMLP(nn.Module):
         embed_dim = config.hidden_size
         self.c_fc = nn.Linear(embed_dim, intermediate_size)
         self.c_proj = nn.Linear(intermediate_size, embed_dim)
-        self.act = nn.PReLU(num_parameters=intermediate_size // 2, init=0.25)
+        self.act = CustomPReLU(num_parameters=intermediate_size, init = 0.0)
         self.dropout = nn.Dropout(float(config.resid_dropout))
 
     def forward(self, hidden_states):

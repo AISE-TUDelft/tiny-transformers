@@ -9,6 +9,8 @@ from transformers import (
 
 from activations_gpt_neo import ActivationsGPTNeoForCausalLM
 from activations_roberta import ActivationsRobertaForMaskedLM
+from activations_config_neo import ActivationsGPTNeoConfig
+from activations_config_roberta import ActivationsRobertaConfig
 
 small_dataset = True
 seed = 1
@@ -65,8 +67,8 @@ config_rob = dict(
     pad_token_id = 0,
 )
 
-config_gpt = GPTNeoConfig(**config_gpt)
-config_rob = RobertaConfig(**config_rob)
+config_gpt = ActivationsGPTNeoConfig(**config_gpt)
+config_rob = ActivationsRobertaConfig(**config_rob)
 
 # TODO: implement PReLU activation function
 # REF: https://pytorch.org/docs/stable/generated/torch.nn.PReLU.html#torch.nn.PReLU
