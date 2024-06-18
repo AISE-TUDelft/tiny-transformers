@@ -18,12 +18,17 @@ from transformers import (
 )
 
 # cheeky library i wrote; feel free to use anything else as well. 
-from .grid_search import GridSearch, search 
-from .eval_baselines import eval_and_aggregate
+from typing import Any
+from grid_search import GridSearch, search 
+from eval_baselines import eval_and_aggregate
 
-def get_dataset(context_length=512, debug=False):
+def get_dataset(
+        context_length=512, debug=False, 
+        # dataset_name='roneneldan/tinystories'
+        dataset_name = 'deven367/babylm-10M',
+    ):
 
-    num_proc = 5 if debug else 64
+    num_proc = 5 if debug else 30
 
     if os.path.exists('./tokenized_dataset'):
         dataset = load_from_disk(f'./tokenized_dataset', keep_in_memory=True)
@@ -32,7 +37,7 @@ def get_dataset(context_length=512, debug=False):
         tok_gpt = GPT2TokenizerFast.from_pretrained('10k-tok')
         tok_gpt.model_max_length = context_length
 
-        dataset = load_dataset('roneneldan/tinystories', num_proc=16)
+        dataset = load_dataset(dataset_name, num_proc=num_proc)
         dataset = dataset.map(
             lambda x: tok_gpt(x['text'], truncation=True, padding='max_length'),
             batched=True, num_proc=num_proc, batch_size=1_000)                 # change num_proc to 1 if multithread issues
@@ -52,7 +57,7 @@ class Gpt(GridSearch):
 
     # EMBEDDING PARAMETERS
     vocab_size              :int = 10_000                   # number of tokens in the vocabulary 
-    hidden_size             :int = 384                      # embedding size (vector length) of each token 
+    hidden_size             :int = 256                      # embedding size (vector length) of each token 
     max_position_embeddings :int = 512                      # maximum sequence length (context window)
 
     # BLOCKS (ATTN & FFN)
@@ -94,15 +99,16 @@ class Rob(GridSearch):
 class Hyperparams(GridSearch):
 
     dataset                     = get_dataset()
-    model_config    :GridSearch = search(Gpt(), Rob())
+    model_config    :GridSearch = search(Rob()) # search(Gpt(), Rob())
 
     # TRAINING HYPERPARAMETERS 
-    batch_size                  = 16 # TinyStories uses 80, but I am training locally on my poor M1 Air
+    batch_size                  = 32 # TinyStories uses 80, but I am training locally on my poor M1 Air
     num_train_epochs            = 1  # TinyStories doesn't mention
-    gradient_accumulation_steps = 16 # TinyStories uses 16
+    gradient_accumulation_steps = 8 # TinyStories uses 16
 
     lr                   :float = 1e-3
-    _train_steps                = len(dataset['train']) // (batch_size * gradient_accumulation_steps)
+    _train_steps                = (len(dataset['train']) * num_train_epochs) \
+                                    // (batch_size * gradient_accumulation_steps)
     eval_steps                  = _train_steps // 10 # evaluate every 10% of training steps
 
     # WANDB INFO
@@ -144,6 +150,7 @@ class Hyperparams(GridSearch):
             f'{self.model_config.intermediate_size}I',
             f'{self.lr}lr',
             f'{self.num_train_epochs}e',
+            'babylm-10M',
         ])
 
     @property 
@@ -197,7 +204,7 @@ class Hyperparams(GridSearch):
 
         # print amount of training steps, and how often the model is evaluated
         print(f'''
-        Retrieving Trainer for \033[1m{self.model_name}\033[0m ({model.num_parameters():,}M)
+        Retrieving Trainer for \033[1m{self.model_name}\033[0m ({model.num_parameters():,} params) {"MLM" if trainer.data_collator.mlm else "CLM"}
 
             Training for {self.num_train_epochs} epochs, {len(train_ds)} samples
             {self.batch_size} batch size, {self.gradient_accumulation_steps} accumulation steps.
@@ -221,35 +228,35 @@ def train(params: Hyperparams):
     if os.path.exists(params.output_dir) and \
         os.path.exists(os.path.join(params.output_dir, 'model.safetensors')):
             print(f'\033[1m{params.model_name} has already been trained; skipping training\033[0m')
-            return
+            run_id = None
+            
+    else: 
+
+        set_all_seeds()
+        run_id = None
+        if not DEBUG:
+            run = wandb.init(
+                entity=params.entity, project=params.project, 
+                group=params.group, name=params.model_name, 
+                config=params.__dict__)
+            run_id = run.id
+
+        else: print('\033[1mRUNNING IN DEBUG MODE \033[0m')
+
+        trainer = params.trainer
+        trainer.train()
+
+        trainer.save_model(params.output_dir)
+
+        # NOTE: this is where you *could* push your model to the hub;
+        # or do that later after you are certain it is solid 
+        # model.push_to_hub(save_dir)
+
+        del trainer.model
+        del trainer
 
     set_all_seeds()
-    run_id = None
-    if not DEBUG:
-        run = wandb.init(
-            entity=params.entity, project=params.project, 
-            group=params.group, name=params.model_name, 
-            config=params.__dict__)
-        run_id = run.id
-
-    else: print('\033[1mRUNNING IN DEBUG MODE \033[0m')
-
-    trainer = params.trainer
-    trainer.train()
-
-    trainer.save_model(params.output_dir)
-
-    # NOTE: this is where you *could* push your model to the hub;
-    # or do that later after you are certain it is solid 
-    # model.push_to_hub(save_dir)
-
-    del trainer.model
-    del trainer
-
-    set_all_seeds()
-    score = eval_and_aggregate(
-        {'model': params.model_name, 'group': params.group, 'index': 0, 'no_train': False}
-    )
+    score = eval_and_aggregate(params.output_dir, debug=DEBUG)
     print(score)
 
     # we need to reinitialise as the babylm eval pipeline inits a whole bunch of runs
