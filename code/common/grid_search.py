@@ -68,8 +68,13 @@ class GridSearch(Surface):
     '''
 
     def __post_init__(self): 
-        # leaving this method here as it may be useful later again
-        pass
+        ''' this allows you to declare fields inline 
+            when instantiating a GridSearch object '''
+        uninitialised_fields = {name: _field for \
+            name, _field in self.__dict__.items() if isinstance(_field, Field)
+        }
+        for name, _field in uninitialised_fields.items():
+            setattr(self, name, _field.default_factory())
 
     def __str__(self) -> str: 
 
