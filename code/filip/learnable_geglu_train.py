@@ -7,11 +7,6 @@ from transformers import (
     GPTNeoForCausalLM, GPTNeoConfig, GPT2TokenizerFast, set_seed
 )
 
-from activations_roberta import ActivationsRobertaForMaskedLM
-from activations_gpt_neo import ActivationsGPTNeoForCausalLM
-from activations_config_neo import ActivationsGPTNeoConfig
-from activations_config_roberta import ActivationsRobertaConfig
-
 small_dataset = True
 seed = 42
 if len(sys.argv) > 1 and (sys.argv[1] == 'True' or sys.argv[1] == 'true'):
@@ -45,7 +40,6 @@ config_gpt = dict(
     num_heads           = 4,                    # attention heads
     window_size         = 256,                  # (GPT-Neo-specific) for local attention 
     intermediate_size   = 1024,                 # size of 'up-projection' layer in FFN
-    custom_activation   = 'swish',              # custom activation function
 
     pad_token_id = 0,           # need to specify this for tokenizer interop between models
 )
@@ -61,20 +55,86 @@ config_rob = dict(
     # BLOCKS (of course naming is different in roberta :) )
     num_hidden_layers = config_gpt['num_layers'],
     num_attention_heads = config_gpt['num_heads'],
-    intermediate_size=1024,
-    custom_activation = 'swish',                     
+    intermediate_size=1024,                     
 
     pad_token_id = 0,
 )
 
-config_gpt = ActivationsGPTNeoConfig(**config_gpt)
-config_rob = ActivationsRobertaConfig(**config_rob)
+config_gpt = GPTNeoConfig(**config_gpt)
+config_rob = RobertaConfig(**config_rob)
 
-# TODO: implement SWISH activation function
+# implement learnable GEGLU activation function
 
 import torch
-from torch import nn
+from torch import nn, Tensor
+import math
 
+
+class LearnableGEGLU(nn.Module):
+    def __init__(self, num_parameters: int = 1, init: float = 1.0,
+                 device=None, dtype=None) -> None:
+        factory_kwargs = {'device': device, 'dtype': dtype}
+        self.num_parameters = num_parameters
+        super().__init__()
+        self.init = init
+        self.beta = nn.Parameter(torch.empty(num_parameters, **factory_kwargs))
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        torch.nn.init.constant_(self.beta, self.init)
+
+    def forward(self, input: Tensor) -> Tensor:
+        x, gate = input.chunk(2, dim=-1)
+        x = x * 0.5 * self.beta * gate * (1.0 + torch.tanh(math.sqrt(2.0 / math.pi) * (gate + 0.044715 * torch.pow(gate, 3.0))))
+        return x
+
+
+# Fix MLP for GPT-Neo with Learnable GEGLU
+class NeoLearnableGEGLUMLP(nn.Module):
+    def __init__(self, intermediate_size, config):
+        super().__init__()
+        embed_dim = config.hidden_size
+        self.c_fc = nn.Linear(embed_dim, intermediate_size * 2) # to match size for GeGLU
+        self.c_proj = nn.Linear(intermediate_size, embed_dim)
+        self.act = LearnableGEGLU(num_parameters=intermediate_size, init=1.0)
+        self.dropout = nn.Dropout(float(config.resid_dropout))
+
+    def forward(self, hidden_states):
+        hidden_states = self.c_fc(hidden_states)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.c_proj(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        return hidden_states
+    
+# Fix MLP for RoBERTa with Learnable GELU
+class RobertaLearnableGEGLUMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.intermediate_size * 2)
+        self.intermediate_act_fn = LearnableGEGLU(num_parameters=config.intermediate_size, init=1.0)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.intermediate_act_fn(hidden_states)
+        return hidden_states
+
+class CustomGPTNeoForCausalLM(GPTNeoForCausalLM):
+    def __init__(self, config, act_implementation=None):
+        super().__init__(config)
+        
+        if act_implementation == "LEARNABLE_GEGLU":
+            # Override MLP with KAN in each transformer block
+            for block in self.transformer.h:
+                block.mlp = NeoLearnableGEGLUMLP(config.intermediate_size, config)
+
+class CustomRobertaForMaskedLM(RobertaForMaskedLM):
+    def __init__(self, config, act_implementation=None):
+        super().__init__(config)
+        
+        if act_implementation == "LEARNABLE_GEGLU":
+            # Override MLP with KAN in each transformer block
+            for layer in self.roberta.encoder.layer:
+                layer.intermediate = RobertaLearnableGEGLUMLP(config)
 
 import random, numpy as np                
 def set_all_seeds(seed=42):
@@ -84,10 +144,10 @@ def set_all_seeds(seed=42):
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
-set_all_seeds()
+set_all_seeds(seed=seed)
 
-gpt = ActivationsGPTNeoForCausalLM(config=config_gpt)
-rob = ActivationsRobertaForMaskedLM(config=config_rob)
+gpt = CustomGPTNeoForCausalLM(config=config_gpt, act_implementation="LEARNABLE_GEGLU")
+rob = CustomRobertaForMaskedLM(config=config_rob, act_implementation="LEARNABLE_GEGLU")
 
 print(f'''
     This GPT has {gpt.num_parameters():,} parameters,
@@ -145,7 +205,7 @@ def get_hyperparameters(model, dataset):
     # TODO: customise this name such that every model you train has a unique identifier!
     config      = model.config 
     model_name  = '-'.join([
-        f'GPT-swish-seed{seed}' if isinstance(model, GPTNeoForCausalLM) else f'BERT-swish-seed{seed}',
+        f'GPT-Learnable-GEGLU-seed{seed}' if isinstance(model, GPTNeoForCausalLM) else f'BERT-Learnable-GEGLU-seed{seed}',
         f'{model.num_parameters()//1e6:.1f}M',
         f'{config.num_layers if isinstance(model, GPTNeoForCausalLM) else config.num_hidden_layers}L', 
         f'{config.num_heads if isinstance(model, GPTNeoForCausalLM) else config.num_attention_heads}H', 
@@ -177,7 +237,7 @@ def get_trainer(
     training_args = TrainingArguments(
 
         seed       = seed,
-        #use_cpu    = False, # use GPU if available (not necessarily faster on laptops, but Apple's MPS have good support)
+        use_cpu    = False, # use GPU if available (not necessarily faster on laptops, but Apple's MPS have good support)
 
         output_dir = os.path.join(output_dir, model_name),
 
@@ -223,16 +283,19 @@ def get_trainer(
     return trainer
 
 # %%
-out_dir = './results2/models_swish_seeds/' 
+out_dir = './results2/models_learnable_geglu_seeds/' 
 
 trainer_gpt = get_trainer(gpt, tok_gpt, train_dataset, eval_dataset, out_dir, **params_gpt)
 trainer_rob = get_trainer(rob, tok_rob, train_dataset, eval_dataset, out_dir, **params_rob)
 
 def do_train(trainer: Trainer, name: str, out_dir: str): 
     set_all_seeds(seed)
-    wandb.init(project='tiny-transformers', name=name, group='swish', config=trainer.args)
+    wandb.init(project='tiny-transformers', name=name, group='learnable_gelu', config=trainer.args)
     trainer.train()
     trainer.save_model(os.path.join(out_dir, name))
+    
+    trained_model = trainer.model
+    torch.save(trained_model.state_dict(), f'./results2/models_learnable_geglu_seeds/{name}/model_state.pt')
 
     del trainer.model
     del trainer
@@ -247,5 +310,3 @@ len(train_dataset['text'][11]), len(train_dataset[11]['input_ids'])
 do_train(trainer_gpt, params_gpt['model_name'], out_dir)
 
 do_train(trainer_rob, params_rob['model_name'], out_dir)
-
-

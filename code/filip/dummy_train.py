@@ -13,7 +13,7 @@ from activations_config_neo import ActivationsGPTNeoConfig
 from activations_config_roberta import ActivationsRobertaConfig
 
 small_dataset = True
-seed = 42
+seed = 1
 if len(sys.argv) > 1 and (sys.argv[1] == 'True' or sys.argv[1] == 'true'):
     small_dataset = True
     print("Using small dataset")
@@ -45,7 +45,7 @@ config_gpt = dict(
     num_heads           = 4,                    # attention heads
     window_size         = 256,                  # (GPT-Neo-specific) for local attention 
     intermediate_size   = 1024,                 # size of 'up-projection' layer in FFN
-    custom_activation   = 'swish',              # custom activation function
+    custom_activation = 'no_act',              # custom activation function
 
     pad_token_id = 0,           # need to specify this for tokenizer interop between models
 )
@@ -61,8 +61,8 @@ config_rob = dict(
     # BLOCKS (of course naming is different in roberta :) )
     num_hidden_layers = config_gpt['num_layers'],
     num_attention_heads = config_gpt['num_heads'],
-    intermediate_size=1024,
-    custom_activation = 'swish',                     
+    intermediate_size=1024,                
+    custom_activation = 'no_act',     
 
     pad_token_id = 0,
 )
@@ -70,13 +70,9 @@ config_rob = dict(
 config_gpt = ActivationsGPTNeoConfig(**config_gpt)
 config_rob = ActivationsRobertaConfig(**config_rob)
 
-# TODO: implement SWISH activation function
 
-import torch
-from torch import nn
-
-
-import random, numpy as np                
+import random, numpy as np       
+import torch         
 def set_all_seeds(seed=42):
 
     set_seed(seed)
@@ -145,7 +141,7 @@ def get_hyperparameters(model, dataset):
     # TODO: customise this name such that every model you train has a unique identifier!
     config      = model.config 
     model_name  = '-'.join([
-        f'GPT-swish-seed{seed}' if isinstance(model, GPTNeoForCausalLM) else f'BERT-swish-seed{seed}',
+        f'GPT-NoAct-seed{seed}' if isinstance(model, GPTNeoForCausalLM) else f'BERT-NoAct-seed{seed}',
         f'{model.num_parameters()//1e6:.1f}M',
         f'{config.num_layers if isinstance(model, GPTNeoForCausalLM) else config.num_hidden_layers}L', 
         f'{config.num_heads if isinstance(model, GPTNeoForCausalLM) else config.num_attention_heads}H', 
@@ -223,14 +219,14 @@ def get_trainer(
     return trainer
 
 # %%
-out_dir = './results2/models_swish_seeds/' 
+out_dir = './results2/models_no_act/' 
 
 trainer_gpt = get_trainer(gpt, tok_gpt, train_dataset, eval_dataset, out_dir, **params_gpt)
 trainer_rob = get_trainer(rob, tok_rob, train_dataset, eval_dataset, out_dir, **params_rob)
 
 def do_train(trainer: Trainer, name: str, out_dir: str): 
     set_all_seeds(seed)
-    wandb.init(project='tiny-transformers', name=name, group='swish', config=trainer.args)
+    wandb.init(project='tiny-transformers', name=name, group='NoAct', config=trainer.args)
     trainer.train()
     trainer.save_model(os.path.join(out_dir, name))
 
@@ -242,10 +238,7 @@ def do_train(trainer: Trainer, name: str, out_dir: str):
 # words vs. tokens 
 len(train_dataset['text'][11]), len(train_dataset[11]['input_ids'])
 
-
 # %%
 do_train(trainer_gpt, params_gpt['model_name'], out_dir)
 
 do_train(trainer_rob, params_rob['model_name'], out_dir)
-
-

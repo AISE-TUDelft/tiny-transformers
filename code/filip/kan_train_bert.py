@@ -47,7 +47,7 @@ config_rob = dict(
     # BLOCKS (of course naming is different in roberta :) )
     num_hidden_layers = 2,
     num_attention_heads = 4, 
-    intermediate_size=384,                     
+    intermediate_size=256,                     
 
     pad_token_id = 0,
 )
@@ -93,6 +93,7 @@ rob = CustomRobertaForMaskedLM(config=config_rob, mlp_implementation="KAN")
 print(f'''
      ROB has {rob.num_parameters():,} parameters.
     ''')
+sys.exit()
 # gpt, rob # uncomment to see model architecture
 # %%
 from transformers import PreTrainedTokenizer, PretrainedConfig
