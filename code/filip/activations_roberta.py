@@ -14,15 +14,15 @@ class LearnableGELU(nn.Module):
         self.num_parameters = num_parameters
         super().__init__()
         self.init = init
-        self.beta = nn.Parameter(torch.empty(num_parameters, **factory_kwargs))
+        self.alpha = nn.Parameter(torch.empty(num_parameters, **factory_kwargs))
         self.reset_parameters()
 
     def reset_parameters(self):
-        torch.nn.init.constant_(self.beta, self.init)
+        torch.nn.init.constant_(self.alpha, self.init)
 
     def forward(self, input: Tensor) -> Tensor:
         # Apply the learnable GELU function
-        return 0.5 * self.beta * input * (1.0 + torch.tanh(math.sqrt(2.0 / math.pi) * (input + 0.044715 * torch.pow(input, 3.0))))
+        return 0.5 * self.alpha * input * (1.0 + torch.tanh(math.sqrt(2.0 / math.pi) * (input + 0.044715 * torch.pow(input, 3.0))))
 
 
 # Fix MLP for RoBERTa with Learnable GELU
@@ -105,14 +105,21 @@ class KANtoMLP(nn.Module):
     def __init__(self, hidden_size, inner_dim):
         super().__init__()
         self.c_fc = KAN([hidden_size, inner_dim])
-        self.c_proj = KAN([inner_dim, hidden_size])
         self.act = nn.GELU()
 
     def forward(self, x):
         x = self.c_fc(x)
         x = self.act(x)
-        x = self.c_proj(x)
         return x
+    
+class RobertaNoActivationMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.dense(hidden_states)
+        return hidden_states
     
 class ActivationsRobertaForMaskedLM(RobertaForMaskedLM):
     config_class = ActivationsRobertaConfig
@@ -130,6 +137,9 @@ class ActivationsRobertaForMaskedLM(RobertaForMaskedLM):
         elif config.custom_activation == 'kan':
             for layer in self.roberta.encoder.layer:
                 layer.intermediate = KANtoMLP(config.hidden_size, config.intermediate_size)
+        elif config.custom_activation == 'no_act':
+            for layer in self.roberta.encoder.layer:
+                layer.intermediate = RobertaNoActivationMLP(config)
      
 
 class ActivationsRobertaForSequenceClassification(RobertaForSequenceClassification):
@@ -148,6 +158,9 @@ class ActivationsRobertaForSequenceClassification(RobertaForSequenceClassificati
         elif config.custom_activation == 'kan':
             for layer in self.roberta.encoder.layer:
                 layer.intermediate = KANtoMLP(config.hidden_size, config.intermediate_size)
+        elif config.custom_activation == 'no_act':
+            for layer in self.roberta.encoder.layer:
+                layer.intermediate = RobertaNoActivationMLP(config)
 
 AutoConfig.register('activations_roberta', ActivationsRobertaConfig)
 AutoModelForMaskedLM.register(ActivationsRobertaConfig, ActivationsRobertaForMaskedLM)

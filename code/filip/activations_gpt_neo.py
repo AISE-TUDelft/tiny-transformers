@@ -14,15 +14,15 @@ class LearnableGELU(nn.Module):
         self.num_parameters = num_parameters
         super().__init__()
         self.init = init
-        self.beta = nn.Parameter(torch.empty(num_parameters, **factory_kwargs))
+        self.alpha = nn.Parameter(torch.empty(num_parameters, **factory_kwargs))
         self.reset_parameters()
 
     def reset_parameters(self):
-        torch.nn.init.constant_(self.beta, self.init)
+        torch.nn.init.constant_(self.alpha, self.init)
 
     def forward(self, input: Tensor) -> Tensor:
         # Apply the learnable GELU function
-        return 0.5 * self.beta * input * (1.0 + torch.tanh(math.sqrt(2.0 / math.pi) * (input + 0.044715 * torch.pow(input, 3.0))))
+        return 0.5 * self.alpha * input * (1.0 + torch.tanh(math.sqrt(2.0 / math.pi) * (input + 0.044715 * torch.pow(input, 3.0))))
     
 # PyTorch PReLU implementation broken, so we need to reinplement it ourselves. Using the formula from the documentation:
 # PReLU(x)=max(0,x)+a∗min(0,x)
@@ -86,15 +86,15 @@ class LearnableSwish(nn.Module):
         self.num_parameters = num_parameters
         super().__init__()
         self.init = init
-        self.beta = nn.Parameter(torch.empty(num_parameters, **factory_kwargs))
+        self.bias = nn.Parameter(torch.empty(num_parameters, **factory_kwargs))
         self.reset_parameters()
 
     def reset_parameters(self):
-        torch.nn.init.constant_(self.beta, self.init)
+        torch.nn.init.constant_(self.bias, self.init)
 
     def forward(self, x):
         # Apply the learnable Swish function
-        return x * F.silu(self.beta * x)
+        return x * F.silu(self.bias * x)
 
 
 # Fix MLP for GPT-Neo with Swish
@@ -129,11 +129,26 @@ class KANtoMLP(nn.Module):
         x = self.c_proj(x)
         return x
     
+class NeoNoActivationMLP(nn.Module):
+    def __init__(self, intermediate_size, config):
+        super().__init__()
+        embed_dim = config.hidden_size
+        self.c_fc = nn.Linear(embed_dim, intermediate_size) 
+        self.c_proj = nn.Linear(intermediate_size, embed_dim)
+        self.dropout = nn.Dropout(float(config.resid_dropout))
+
+    def forward(self, hidden_states):
+        hidden_states = self.c_fc(hidden_states)
+        hidden_states = self.c_proj(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        return hidden_states
+    
 class ActivationsGPTNeoForCausalLM(GPTNeoForCausalLM):
     config_class = ActivationsGPTNeoConfig
     def __init__(self, config: ActivationsGPTNeoConfig):
         super().__init__(config)
         if config.custom_activation == 'learnable_gelu':
+            print('here')
             for block in self.transformer.h:
                 block.mlp = NeoLearnableGELUMLP(config.intermediate_size, config)
         elif config.custom_activation == 'prelu':
@@ -145,6 +160,9 @@ class ActivationsGPTNeoForCausalLM(GPTNeoForCausalLM):
         elif config.custom_activation == 'kan':
             for block in self.transformer.h:
                 block.mlp = KANtoMLP(config.hidden_size, config.intermediate_size)
+        elif config.custom_activation == 'no_act':
+            for block in self.transformer.h:
+                block.mlp = NeoNoActivationMLP(config.intermediate_size, config)
      
 
 class ActivationsGPTNeoForSequenceClassification(GPTNeoForSequenceClassification):
@@ -163,6 +181,9 @@ class ActivationsGPTNeoForSequenceClassification(GPTNeoForSequenceClassification
         elif config.custom_activation == 'kan':
             for block in self.transformer.h:
                 block.mlp = KANtoMLP(config.hidden_size, config.intermediate_size)
+        elif config.custom_activation == 'no_act':
+            for block in self.transformer.h:
+                block.mlp = NeoNoActivationMLP(config.intermediate_size, config)
 
 AutoConfig.register('activations_gpt_neo', ActivationsGPTNeoConfig)
 AutoModelForCausalLM.register(ActivationsGPTNeoConfig, ActivationsGPTNeoForCausalLM)

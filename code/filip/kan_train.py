@@ -244,7 +244,7 @@ len(train_dataset['text'][11]), len(train_dataset[11]['input_ids'])
 
 
 # %%
-do_train(trainer_gpt, params_gpt['model_name'], out_dir)
+#do_train(trainer_gpt, params_gpt['model_name'], out_dir)
 
 do_train(trainer_rob, params_rob['model_name'], out_dir)
 
