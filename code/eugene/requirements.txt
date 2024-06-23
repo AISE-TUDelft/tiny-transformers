@@ -1,0 +1,6 @@
+transformers
+numpy
+datasets
+jupyterlab
+accelerate
+wandb

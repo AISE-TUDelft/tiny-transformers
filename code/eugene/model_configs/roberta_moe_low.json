@@ -1,0 +1,1 @@
+{"vocab_size": 10000, "hidden_size": 256, "max_position_embeddings": 513, "num_hidden_layers": 2, "num_attention_heads": 4, "pad_token_id": 0, "sparsity_type": 1, "num_experts": 4, "topk": 3, "intermediate_size": 1023}
