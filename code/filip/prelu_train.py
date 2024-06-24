@@ -7,7 +7,13 @@ from transformers import (
     GPTNeoForCausalLM, GPTNeoConfig, GPT2TokenizerFast, set_seed
 )
 
+from activations_gpt_neo import ActivationsGPTNeoForCausalLM
+from activations_roberta import ActivationsRobertaForMaskedLM
+from activations_config_neo import ActivationsGPTNeoConfig
+from activations_config_roberta import ActivationsRobertaConfig
+
 small_dataset = True
+seed = 1
 if len(sys.argv) > 1 and (sys.argv[1] == 'True' or sys.argv[1] == 'true'):
     small_dataset = True
     print("Using small dataset")
@@ -16,6 +22,15 @@ elif len(sys.argv) > 1 and (sys.argv[1] == 'False' or sys.argv[1] == 'false'):
     print("Using large dataset")
 else:
     print("Using small dataset")
+
+if len(sys.argv) > 2:
+    try:
+        seed = int(sys.argv[2])
+        print(f"Seed set to {seed}")
+    except ValueError:
+        print("Invalid seed value, using default (42)")
+print(f"Small dataset: {small_dataset}")
+print(f"Seed: {seed}")
 
 config_gpt = dict(
 
@@ -30,6 +45,7 @@ config_gpt = dict(
     num_heads           = 4,                    # attention heads
     window_size         = 256,                  # (GPT-Neo-specific) for local attention 
     intermediate_size   = 1024,                 # size of 'up-projection' layer in FFN
+    custom_activation   = 'prelu',              # custom activation function
 
     pad_token_id = 0,           # need to specify this for tokenizer interop between models
 )
@@ -45,69 +61,20 @@ config_rob = dict(
     # BLOCKS (of course naming is different in roberta :) )
     num_hidden_layers = config_gpt['num_layers'],
     num_attention_heads = config_gpt['num_heads'],
-    intermediate_size=1024,                     
+    intermediate_size=1024,
+    custom_activation = 'prelu',                     
 
     pad_token_id = 0,
 )
 
-config_gpt = GPTNeoConfig(**config_gpt)
-config_rob = RobertaConfig(**config_rob)
+config_gpt = ActivationsGPTNeoConfig(**config_gpt)
+config_rob = ActivationsRobertaConfig(**config_rob)
 
 # TODO: implement PReLU activation function
 # REF: https://pytorch.org/docs/stable/generated/torch.nn.PReLU.html#torch.nn.PReLU
 
-import torch
-from torch import nn
-import torch.nn.functional as F
-
-# Fix MLP for GPT-Neo with PReLU
-class NeoPReLUMLP(nn.Module):
-    def __init__(self, intermediate_size, config):  # in MLP: intermediate_size= 4 * hidden_size
-        super().__init__()
-        embed_dim = config.hidden_size
-        self.c_fc = nn.Linear(embed_dim, intermediate_size)
-        self.c_proj = nn.Linear(intermediate_size, embed_dim)
-        self.act = nn.PReLU(num_parameters=intermediate_size // 2, init=0.25)
-        self.dropout = nn.Dropout(float(config.resid_dropout))
-
-    def forward(self, hidden_states):
-        hidden_states = self.c_fc(hidden_states)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.c_proj(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        return hidden_states
-    
-# Fix MLP for RoBERTa with PReLU
-class RobertaPReLUMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.intermediate_act_fn = nn.PReLU(num_parameters=config.intermediate_size // 2, init=0.25)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
-        return hidden_states
-
-class CustomGPTNeoForCausalLM(GPTNeoForCausalLM):
-    def __init__(self, config, act_implementation=None):
-        super().__init__(config)
-        
-        if act_implementation == "PRELU":
-            # Override MLP with KAN in each transformer block
-            for block in self.transformer.h:
-                block.mlp = NeoPReLUMLP(config.intermediate_size, config)
-
-class CustomRobertaForMaskedLM(RobertaForMaskedLM):
-    def __init__(self, config, act_implementation=None):
-        super().__init__(config)
-        
-        if act_implementation == "PRELU":
-            # Override MLP with KAN in each transformer block
-            for layer in self.roberta.encoder.layer:
-                layer.intermediate = RobertaPReLUMLP(config)
-
-import random, numpy as np                
+import random, numpy as np      
+import torch          
 def set_all_seeds(seed=42):
 
     set_seed(seed)
@@ -117,14 +84,13 @@ def set_all_seeds(seed=42):
     torch.cuda.manual_seed_all(seed)
 set_all_seeds()
 
-gpt = CustomGPTNeoForCausalLM(config=config_gpt, act_implementation="PRELU")
-rob = CustomRobertaForMaskedLM(config=config_rob, act_implementation="PRELU")
+gpt = ActivationsGPTNeoForCausalLM(config=config_gpt)
+rob = ActivationsRobertaForMaskedLM(config=config_rob)
 
 print(f'''
     This GPT has {gpt.num_parameters():,} parameters,
      and ROB has {rob.num_parameters():,} parameters.
     ''')
-
 # gpt, rob # uncomment to see model architecture
 
 # %%
@@ -176,7 +142,7 @@ def get_hyperparameters(model, dataset):
     # TODO: customise this name such that every model you train has a unique identifier!
     config      = model.config 
     model_name  = '-'.join([
-        'GPT-PReLU' if isinstance(model, GPTNeoForCausalLM) else 'BERT-PReLU',
+        f'GPT-PReLU-seed{seed}' if isinstance(model, GPTNeoForCausalLM) else f'BERT-PReLU-seed{seed}',
         f'{model.num_parameters()//1e6:.1f}M',
         f'{config.num_layers if isinstance(model, GPTNeoForCausalLM) else config.num_hidden_layers}L', 
         f'{config.num_heads if isinstance(model, GPTNeoForCausalLM) else config.num_attention_heads}H', 
@@ -207,7 +173,7 @@ def get_trainer(
 
     training_args = TrainingArguments(
 
-        seed       = 42,
+        seed       = seed,
         use_cpu    = False, # use GPU if available (not necessarily faster on laptops, but Apple's MPS have good support)
 
         output_dir = os.path.join(output_dir, model_name),
@@ -254,15 +220,14 @@ def get_trainer(
     return trainer
 
 # %%
-out_dir = './results/models_PReLU/' 
+out_dir = './results2/models_prelu_seeds/' 
 
 trainer_gpt = get_trainer(gpt, tok_gpt, train_dataset, eval_dataset, out_dir, **params_gpt)
 trainer_rob = get_trainer(rob, tok_rob, train_dataset, eval_dataset, out_dir, **params_rob)
 
-# %%
 def do_train(trainer: Trainer, name: str, out_dir: str): 
-
-    wandb.init(project='tiny-transformers', name=name, group='PReLU', config=trainer.args)
+    set_all_seeds(seed)
+    wandb.init(project='tiny-transformers', name=name, group='prelu', config=trainer.args)
     trainer.train()
     trainer.save_model(os.path.join(out_dir, name))
 
@@ -274,10 +239,7 @@ def do_train(trainer: Trainer, name: str, out_dir: str):
 # words vs. tokens 
 len(train_dataset['text'][11]), len(train_dataset[11]['input_ids'])
 
-
 # %%
 do_train(trainer_gpt, params_gpt['model_name'], out_dir)
 
 do_train(trainer_rob, params_rob['model_name'], out_dir)
-
-

@@ -7,8 +7,8 @@ from transformers import (
     GPTNeoForCausalLM, GPTNeoConfig, GPT2TokenizerFast, set_seed
 )
 
-from activations_roberta import ActivationsRobertaForMaskedLM
 from activations_gpt_neo import ActivationsGPTNeoForCausalLM
+from activations_roberta import ActivationsRobertaForMaskedLM
 from activations_config_neo import ActivationsGPTNeoConfig
 from activations_config_roberta import ActivationsRobertaConfig
 
@@ -45,7 +45,7 @@ config_gpt = dict(
     num_heads           = 4,                    # attention heads
     window_size         = 256,                  # (GPT-Neo-specific) for local attention 
     intermediate_size   = 1024,                 # size of 'up-projection' layer in FFN
-    custom_activation   = 'swish',              # custom activation function
+    custom_activation  = 'learnable_gelu',
 
     pad_token_id = 0,           # need to specify this for tokenizer interop between models
 )
@@ -61,8 +61,8 @@ config_rob = dict(
     # BLOCKS (of course naming is different in roberta :) )
     num_hidden_layers = config_gpt['num_layers'],
     num_attention_heads = config_gpt['num_heads'],
-    intermediate_size=1024,
-    custom_activation = 'swish',                     
+    intermediate_size=1024,       
+    custom_activation = 'learnable_gelu',              
 
     pad_token_id = 0,
 )
@@ -70,13 +70,9 @@ config_rob = dict(
 config_gpt = ActivationsGPTNeoConfig(**config_gpt)
 config_rob = ActivationsRobertaConfig(**config_rob)
 
-# TODO: implement SWISH activation function
+# implement learnable GELU activation function
 
-import torch
-from torch import nn
-
-
-import random, numpy as np                
+import random, torch, numpy as np                
 def set_all_seeds(seed=42):
 
     set_seed(seed)
@@ -84,7 +80,7 @@ def set_all_seeds(seed=42):
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
-set_all_seeds()
+set_all_seeds(seed=seed)
 
 gpt = ActivationsGPTNeoForCausalLM(config=config_gpt)
 rob = ActivationsRobertaForMaskedLM(config=config_rob)
@@ -145,7 +141,7 @@ def get_hyperparameters(model, dataset):
     # TODO: customise this name such that every model you train has a unique identifier!
     config      = model.config 
     model_name  = '-'.join([
-        f'GPT-swish-seed{seed}' if isinstance(model, GPTNeoForCausalLM) else f'BERT-swish-seed{seed}',
+        f'GPT-Learnable-GELU-seed{seed}' if isinstance(model, GPTNeoForCausalLM) else f'BERT-Learnable-GELU-seed{seed}',
         f'{model.num_parameters()//1e6:.1f}M',
         f'{config.num_layers if isinstance(model, GPTNeoForCausalLM) else config.num_hidden_layers}L', 
         f'{config.num_heads if isinstance(model, GPTNeoForCausalLM) else config.num_attention_heads}H', 
@@ -177,7 +173,7 @@ def get_trainer(
     training_args = TrainingArguments(
 
         seed       = seed,
-        #use_cpu    = False, # use GPU if available (not necessarily faster on laptops, but Apple's MPS have good support)
+        use_cpu    = False, # use GPU if available (not necessarily faster on laptops, but Apple's MPS have good support)
 
         output_dir = os.path.join(output_dir, model_name),
 
@@ -223,14 +219,14 @@ def get_trainer(
     return trainer
 
 # %%
-out_dir = './results2/models_swish_seeds/' 
+out_dir = './results2/models_learnable_gelu_seeds/' 
 
 trainer_gpt = get_trainer(gpt, tok_gpt, train_dataset, eval_dataset, out_dir, **params_gpt)
 trainer_rob = get_trainer(rob, tok_rob, train_dataset, eval_dataset, out_dir, **params_rob)
 
 def do_train(trainer: Trainer, name: str, out_dir: str): 
     set_all_seeds(seed)
-    wandb.init(project='tiny-transformers', name=name, group='swish', config=trainer.args)
+    wandb.init(project='tiny-transformers', name=name, group='learnable_gelu', config=trainer.args)
     trainer.train()
     trainer.save_model(os.path.join(out_dir, name))
 
