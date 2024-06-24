@@ -1,0 +1,64 @@
+{"row": 0, "fragment": "sentence", "contrast": "inanimate vs. animate", "sentence_good": "What did you get?\nI got a chair.", "sentence_bad": "What did you get?\nI got a teacher."}
+{"row": 0, "fragment": "fragment", "contrast": "inanimate vs. animate", "sentence_good": "A: What did you sell?\nB: A chair.", "sentence_bad": "A: What did you sell?\nB: Sarah."}
+{"row": 0, "fragment": "sentence", "contrast": "inanimate vs. animate", "sentence_good": "David: What did you sell?\nSarah: I sold a chair.", "sentence_bad": "David: What did you sell?\nSarah: I sold sarah."}
+{"row": 0, "fragment": "sentence", "contrast": "inanimate vs. animate", "sentence_good": "A: What did you get?\nB: I got a piano.", "sentence_bad": "A: What did you get?\nB: I got a doctor."}
+{"row": 0, "fragment": "sentence", "contrast": "inanimate vs. animate", "sentence_good": "David: What did you get?\nSarah: I got eggs.", "sentence_bad": "David: What did you get?\nSarah: I got a doctor."}
+{"row": 1, "fragment": "sentence", "contrast": "inanimate vs. animate", "sentence_good": "A: What did you break?\nB: I broke a bowl.", "sentence_bad": "A: What did you break?\nB: I broke a doctor."}
+{"row": 1, "fragment": "fragment", "contrast": "inanimate vs. animate", "sentence_good": "What did you make?\nA lamp.", "sentence_bad": "What did you make?\nA teacher."}
+{"row": 1, "fragment": "fragment", "contrast": "inanimate vs. animate", "sentence_good": "What did you make?\nA lamp.", "sentence_bad": "What did you make?\nSarah."}
+{"row": 1, "fragment": "fragment", "contrast": "inanimate vs. animate", "sentence_good": "David: What did you make?\nSarah: A computer.", "sentence_bad": "David: What did you make?\nSarah: Sarah."}
+{"row": 2, "fragment": "fragment", "contrast": "inanimate vs. animate", "sentence_good": "David: What did you cook?\nSarah: Potatoes.", "sentence_bad": "David: What did you cook?\nSarah: A teacher."}
+{"row": 2, "fragment": "fragment", "contrast": "inanimate vs. animate", "sentence_good": "David: What did you eat?\nSarah: Chicken.", "sentence_bad": "David: What did you eat?\nSarah: Sarah."}
+{"row": 2, "fragment": "sentence", "contrast": "inanimate vs. animate", "sentence_good": "A: What did you cook?\nB: I cooked chicken.", "sentence_bad": "A: What did you cook?\nB: I cooked a teacher."}
+{"row": 2, "fragment": "fragment", "contrast": "inanimate vs. animate", "sentence_good": "What did you cook?\nPotatoes.", "sentence_bad": "What did you cook?\nSarah."}
+{"row": 3, "fragment": "sentence", "contrast": "inanimate vs. animate", "sentence_good": "What did you close?\nI closed the gate.", "sentence_bad": "What did you close?\nI closed sarah."}
+{"row": 3, "fragment": "sentence", "contrast": "inanimate vs. animate", "sentence_good": "What did you open?\nI opened the box.", "sentence_bad": "What did you open?\nI opened david."}
+{"row": 3, "fragment": "sentence", "contrast": "inanimate vs. animate", "sentence_good": "What did you lock?\nI locked the window.", "sentence_bad": "What did you lock?\nI locked a teacher."}
+{"row": 3, "fragment": "fragment", "contrast": "inanimate vs. animate", "sentence_good": "A: What did you close?\nB: The window.", "sentence_bad": "A: What did you close?\nB: David."}
+{"row": 3, "fragment": "fragment", "contrast": "inanimate vs. animate", "sentence_good": "A: What did you lock?\nB: The gate.", "sentence_bad": "A: What did you lock?\nB: David."}
+{"row": 3, "fragment": "sentence", "contrast": "inanimate vs. animate", "sentence_good": "David: What did you close?\nSarah: I closed the window.", "sentence_bad": "David: What did you close?\nSarah: I closed sarah."}
+{"row": 3, "fragment": "fragment", "contrast": "inanimate vs. animate", "sentence_good": "David: What did you close?\nSarah: The chest.", "sentence_bad": "David: What did you close?\nSarah: David."}
+{"row": 4, "fragment": "fragment", "contrast": "animate vs. inanimate", "sentence_good": "A: Who did you see?\nB: A teacher.", "sentence_bad": "A: Who did you see?\nB: A car."}
+{"row": 4, "fragment": "sentence", "contrast": "animate vs. inanimate", "sentence_good": "David: Who did you see?\nSarah: I saw a teacher.", "sentence_bad": "David: Who did you see?\nSarah: I saw a sofa."}
+{"row": 4, "fragment": "fragment", "contrast": "animate vs. inanimate", "sentence_good": "A: Who helped you?\nB: Sarah.", "sentence_bad": "A: Who helped you?\nB: Milk."}
+{"row": 4, "fragment": "fragment", "contrast": "animate vs. inanimate", "sentence_good": "David: Who did you see?\nSarah: David.", "sentence_bad": "David: Who did you see?\nSarah: A car."}
+{"row": 4, "fragment": "sentence", "contrast": "animate vs. inanimate", "sentence_good": "A: Who did you see?\nB: I saw a doctor.", "sentence_bad": "A: Who did you see?\nB: I saw eggs."}
+{"row": 4, "fragment": "fragment", "contrast": "animate vs. inanimate", "sentence_good": "Who is here?\nSarah.", "sentence_bad": "Who is here?\nA car."}
+{"row": 4, "fragment": "sentence", "contrast": "animate vs. inanimate", "sentence_good": "Who did you see?\nI saw a doctor.", "sentence_bad": "Who did you see?\nI saw a car."}
+{"row": 4, "fragment": "fragment", "contrast": "animate vs. inanimate", "sentence_good": "Who did you meet?\nA doctor.", "sentence_bad": "Who did you meet?\nA car."}
+{"row": 4, "fragment": "fragment", "contrast": "animate vs. inanimate", "sentence_good": "David: Who did you meet?\nSarah: A teacher.", "sentence_bad": "David: Who did you meet?\nSarah: Eggs."}
+{"row": 5, "fragment": "sentence", "contrast": "animate vs. inanimate", "sentence_good": "David: Who kissed you?\nSarah: A doctor kissed you.", "sentence_bad": "David: Who kissed you?\nSarah: A chair kissed you."}
+{"row": 5, "fragment": "fragment", "contrast": "animate vs. inanimate", "sentence_good": "Who is talking to you?\nSarah.", "sentence_bad": "Who is talking to you?\nA lamp."}
+{"row": 5, "fragment": "fragment", "contrast": "animate vs. inanimate", "sentence_good": "Who kissed you?\nA teacher.", "sentence_bad": "Who kissed you?\nA statue."}
+{"row": 5, "fragment": "fragment", "contrast": "animate vs. inanimate", "sentence_good": "David: Who shook your hand?\nSarah: A teacher.", "sentence_bad": "David: Who shook your hand?\nSarah: A statue."}
+{"row": 5, "fragment": "fragment", "contrast": "animate vs. inanimate", "sentence_good": "Who shook your hand?\nA doctor.", "sentence_bad": "Who shook your hand?\nA statue."}
+{"row": 5, "fragment": "fragment", "contrast": "animate vs. inanimate", "sentence_good": "A: Who kissed you?\nB: Sarah.", "sentence_bad": "A: Who kissed you?\nB: A bowl."}
+{"row": 5, "fragment": "fragment", "contrast": "animate vs. inanimate", "sentence_good": "David: Who kissed you?\nSarah: David.", "sentence_bad": "David: Who kissed you?\nSarah: A chair."}
+{"row": 6, "fragment": "sentence", "contrast": "animate vs. inanimate", "sentence_good": "David: Who is sleeping?\nSarah: David is sleeping.", "sentence_bad": "David: Who is sleeping?\nSarah: Milk is sleeping."}
+{"row": 6, "fragment": "fragment", "contrast": "animate vs. inanimate", "sentence_good": "Who is sleeping?\nDavid.", "sentence_bad": "Who is sleeping?\nEggs."}
+{"row": 6, "fragment": "fragment", "contrast": "animate vs. inanimate", "sentence_good": "David: Who is sleeping?\nSarah: Sarah.", "sentence_bad": "David: Who is sleeping?\nSarah: A chair."}
+{"row": 6, "fragment": "fragment", "contrast": "animate vs. inanimate", "sentence_good": "A: Who is sleeping?\nB: A teacher.", "sentence_bad": "A: Who is sleeping?\nB: A book."}
+{"row": 7, "fragment": "sentence", "contrast": "animate vs. inanimate", "sentence_good": "A: Who is playing the guitar?\nB: A doctor is playing the guitar.", "sentence_bad": "A: Who is playing the guitar?\nB: A piano is playing the guitar."}
+{"row": 7, "fragment": "fragment", "contrast": "animate vs. inanimate", "sentence_good": "A: Who painted that picture?\nB: David.", "sentence_bad": "A: Who painted that picture?\nB: Milk."}
+{"row": 7, "fragment": "fragment", "contrast": "animate vs. inanimate", "sentence_good": "David: Who is playing the guitar?\nSarah: Sarah.", "sentence_bad": "David: Who is playing the guitar?\nSarah: A sofa."}
+{"row": 7, "fragment": "fragment", "contrast": "animate vs. inanimate", "sentence_good": "Who is drawing?\nDavid.", "sentence_bad": "Who is drawing?\nEggs."}
+{"row": 7, "fragment": "sentence", "contrast": "animate vs. inanimate", "sentence_good": "David: Who is drawing?\nSarah: A teacher is drawing.", "sentence_bad": "David: Who is drawing?\nSarah: A car is drawing."}
+{"row": 8, "fragment": "sentence", "contrast": "loc vs. NP", "sentence_good": "A: Where did you send the package?\nB: I sent the package to the next town over.", "sentence_bad": "A: Where did you send the package?\nB: I sent the package a computer."}
+{"row": 8, "fragment": "sentence", "contrast": "loc vs. NP", "sentence_good": "Where did you send the package?\nI sent the package to europe.", "sentence_bad": "Where did you send the package?\nI sent the package eggs."}
+{"row": 8, "fragment": "sentence", "contrast": "loc vs. NP", "sentence_good": "A: Where did you go?\nB: I went across the country.", "sentence_bad": "A: Where did you go?\nB: I went a book."}
+{"row": 8, "fragment": "fragment", "contrast": "loc vs. NP", "sentence_good": "David: Where did you go?\nSarah: To the next town over.", "sentence_bad": "David: Where did you go?\nSarah: Milk."}
+{"row": 8, "fragment": "fragment", "contrast": "loc vs. NP", "sentence_good": "A: Where did you travel to?\nB: To the other side of town.", "sentence_bad": "A: Where did you travel to?\nB: A car."}
+{"row": 8, "fragment": "sentence", "contrast": "loc vs. NP", "sentence_good": "David: Where did you send the package?\nSarah: I sent the package across the country.", "sentence_bad": "David: Where did you send the package?\nSarah: I sent the package a sofa."}
+{"row": 8, "fragment": "fragment", "contrast": "loc vs. NP", "sentence_good": "Where did you send the package?\nTo california.", "sentence_bad": "Where did you send the package?\nMilk."}
+{"row": 8, "fragment": "fragment", "contrast": "loc vs. NP", "sentence_good": "A: Where are you headed?\nB: Across the country.", "sentence_bad": "A: Where are you headed?\nB: Eggs."}
+{"row": 8, "fragment": "fragment", "contrast": "loc vs. NP", "sentence_good": "A: Where did you drive to?\nB: To the next town over.", "sentence_bad": "A: Where did you drive to?\nB: A chair."}
+{"row": 8, "fragment": "fragment", "contrast": "loc vs. NP", "sentence_good": "Where are you headed?\nAcross the country.", "sentence_bad": "Where are you headed?\nA computer."}
+{"row": 8, "fragment": "sentence", "contrast": "loc vs. NP", "sentence_good": "A: Where did you travel to?\nB: I traveled to europe.", "sentence_bad": "A: Where did you travel to?\nB: I traveled eggs."}
+{"row": 9, "fragment": "sentence", "contrast": "loc vs. NP", "sentence_good": "Where did you find it?\nI found it under the papers.", "sentence_bad": "Where did you find it?\nI found it a car."}
+{"row": 9, "fragment": "sentence", "contrast": "loc vs. NP", "sentence_good": "A: Where did you put it?\nB: I put it on the table.", "sentence_bad": "A: Where did you put it?\nB: I put it a sofa."}
+{"row": 9, "fragment": "fragment", "contrast": "loc vs. NP", "sentence_good": "David: Where did you put it?\nSarah: Behind the sofa.", "sentence_bad": "David: Where did you put it?\nSarah: Eggs."}
+{"row": 9, "fragment": "fragment", "contrast": "loc vs. NP", "sentence_good": "A: Where did you leave it?\nB: Next to the bush.", "sentence_bad": "A: Where did you leave it?\nB: A book."}
+{"row": 9, "fragment": "sentence", "contrast": "loc vs. NP", "sentence_good": "David: Where did you leave it?\nSarah: I left it behind the sofa.", "sentence_bad": "David: Where did you leave it?\nSarah: I left it a book."}
+{"row": 9, "fragment": "sentence", "contrast": "loc vs. NP", "sentence_good": "Where did you put it?\nI put it next to the bush.", "sentence_bad": "Where did you put it?\nI put it a piano."}
+{"row": 9, "fragment": "fragment", "contrast": "loc vs. NP", "sentence_good": "A: Where did you leave it?\nB: Behind the sofa.", "sentence_bad": "A: Where did you leave it?\nB: A table."}
+{"row": 9, "fragment": "sentence", "contrast": "loc vs. NP", "sentence_good": "Where did you find it?\nI found it on the table.", "sentence_bad": "Where did you find it?\nI found it eggs."}
