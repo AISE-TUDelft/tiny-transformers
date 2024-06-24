@@ -7,7 +7,10 @@ echo $CWD $(pwd)
 # to the model directory
 model_dir=$1
 tok_files='10k-tok/*'
-max_seq_length=512
+
+# max seq length 128 throws a few tokenisation errors because many of the tasks in GLUE have longer sequences. However, this is the minimum value according to https://github.com/huggingface/transformers/blob/main/examples/pytorch/text-classification/run_glue.py
+# While 512 like our models could be nice, it's a lot more expensive, especially for checkpoints
+max_seq_length=128
 
 if [ "$2" == "debug" ]; then
 	max_epochs=1
@@ -32,13 +35,13 @@ fi
 
 ## BLIMP (note the batch size is defined in two places)
 printf "\n\n\n\033[1mRunning BLiMP ($model_type) for \n$model_dir\n"
-printf "max_seq_length=$max_seq_length \tmax_epochs=$max_epochs \tbatch_size=80\033[0m\n"
+printf "max_seq_length=$max_seq_length \tbatch_size=80\033[0m\n"
 # args: dir, type, batch_size, 
 python babylm_eval.py $model_dir $model_type 80
 
 ## GLUE (note the batch size is defined in two places)
-printf "\n\n\033[1mRunning (Super)GLUE for \n$model_dir\n\n"
-printf "max_seq_length=$max_seq_length \tmax_epochs=$max_epochs \tbatch_size=80\033[0m"
+printf "\n\n\033[1mRunning (Super)GLUE for \n$model_dir\n"
+printf "max_seq_length=$max_seq_length \tmax_epochs=$max_epochs \tbatch_size=80\033[0m\n"
 ## args: dir, lr, patience (for early stopping), batch_size, eval_steps, max_train_epochs, max_seq_length, seed
 ./finetune_all_tasks.sh $model_dir 5e-5 10 80 '0.05' $max_epochs $max_seq_length
 

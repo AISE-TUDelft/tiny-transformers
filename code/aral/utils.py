@@ -160,10 +160,14 @@ class Hyperparams(GridSearch):
 
         self.trainer = trainer 
         return trainer
+    
+    @property 
+    def n_train_steps(self):
+        return (len(self.trainer.train_dataset) * self.num_train_epochs) / (self.batch_size * self.gradient_accumulation_steps)
 
     def should_continue_wandb(self) -> bool: 
         ''' set up wandb run (adds self.run_id), return true if the user wants to continue ''' 
-        
+
         if self.debug: return False
 
         api = wandb.Api()
@@ -171,23 +175,20 @@ class Hyperparams(GridSearch):
                       key = lambda run: dt.datetime.fromisoformat(run.created_at))
 
         # If there exists a run on wandb with the same name
-        if not any([self.model_name == run.name for run in runs]): 
+        if any([self.model_name == run.name for run in runs]): 
             for run in runs: 
                 if run.name == self.model_name: break 
 
-            # ask the user if they want to continue that run
-            resume = input('Found run \033[1m{run.id}\033[0m on wandb. Continue? [y/n] ')
-            if resume.lower() == 'y': 
-
-                # resume that run and return its id 
-                run = wandb.init(entity = self.entity, project = self.project, 
-                                 id = run.id, resume = 'must')
-                self.run_id = run.id 
-                return True 
-
-            # otherwise, give the user some time to undo if they are wrong
+            print(f'Found run \033[1m{run.id}\033[0m on wandb. Continuing... ')
             time.sleep(3)
- 
+
+            # resume that run and return its id 
+            run = wandb.init(entity = self.entity, project = self.project, 
+                             id = run.id, resume = 'must')
+            self.run_id = run.id 
+            return True 
+
+        print('Initialising new wandb run... ')
         # initialise a new wandb run
         run = wandb.init(entity=self.entity, project=self.project, 
                          group=self.group, name=self.model_name, 
@@ -221,30 +222,59 @@ class Hyperparams(GridSearch):
         # model.push_to_hub(save_dir)
 
 
-    def evaluate(self): 
+    def evaluate(self, model_path=None): 
         ''' evaluate on babylm, returning score dict and wandb id ''' 
 
-        print(f'\t\033[1m> Evaluating {self.model_name}\033[0m')
+        if model_path is None: model_path = self.output_dir
+
+        # if we are in the root model dir, it's the final model
+        log_step = None if os.path.basename(model_path) == self.model_name \
+                else int(os.path.basename(model_path).split('-')[-1])
+
+        print(f'\t\033[1m> Evaluating {"/".join(model_path.split("/")[:-2])}\033[0m ({log_step})')
+
         set_all_seeds()
-        score = eval_and_aggregate(self.output_dir, 0, debug=self.debug)
+        score = eval_and_aggregate(model_path, 0, debug=self.debug)
 
-        # Try to resume the wandb run
-        if self.should_continue_wandb():
-            wandb.log(score)
-            wandb.finish()
+        # # Try to resume the wandb run
+        # if self.should_continue_wandb():
+        #     # TODO: wandb silently fails here because step HAS to increase monotonically.
+        #     wandb.log(score, step=log_step)
+        #     wandb.finish()
 
-        # otherwise just print to console
-        else:
-            print(f'Could not find a run on wandb to save the scores to!!')
-            print(score)
+        # # otherwise just print to console
+        # else:
+        #     print(f'Could not find a run on wandb to save the scores to!!')
 
         return score
 
-    def train_and_eval(self, debug=False):
+    def train_and_eval(self, all_checkpoints=False):
+        ''' Train and evaluate this hyperparameter combination, and optionally also
+        evaluate all its checkpoints. Does not log to wandb if debug=True. 
+        '''
 
         if self.debug: print('\033[1mRUNNING IN DEBUG MODE \033[0m')
 
         self.train()
-        return self.evaluate()
+        score = self.evaluate()
 
+        checkpoint_dir = list(os.listdir(os.path.join(self.output_dir, 'checkpoints')))
+        last_checkpoint_number = int(checkpoint_dir[-1].split('-')[-1])
+        scores = {last_checkpoint_number: score}
+
+        if all_checkpoints: # evaluate all checkpoints
+
+            print(f'Evaluating {len(checkpoint_dir)} checkpoints')
+            scores.update({
+                int(checkpoint_number.split('-')[-1]): self.evaluate(
+                    os.path.join(self.output_dir, 'checkpoints', checkpoint_number))
+                for checkpoint_number in checkpoint_dir[:-1]
+            })
+
+            # print all scores
+            print(f'Score for \033[1m{self.model_name}: \nstep \tBLIMP \tGLUE \033[0m\n')
+            for step, score in sorted(scores.items(), key=lambda score: score[0]):
+                print(f"{step} \t{score['blimp_avg']*100:.2f}% \t{score['glue_avg']*100:.2f}")
+
+        return scores
 

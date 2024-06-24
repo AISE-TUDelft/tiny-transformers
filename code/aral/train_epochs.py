@@ -71,7 +71,9 @@ class RoBERTaConfig(GridSearch):
     pad_token_id            :int = 0
 
     def create_model(self):
-        return RobertaForMaskedLM(RobertaConfig(**self.__dict__))
+        config = RobertaConfig(**self.__dict__)
+        import pdb; pdb.set_trace()
+        return RobertaForMaskedLM(config)
 
     def create_tokenizer(self):
         return RobertaTokenizerFast.from_pretrained('common/10k-tok')
@@ -89,34 +91,14 @@ if __name__ == '__main__':
         debug=DEBUG, 
         group='baseline_epochs',
         num_train_epochs=3,
-        batch_size=80,
+        batch_size=64,
+        gradient_accumulation_steps=4,
     )
     print(params)
 
     for param in params: 
+
         print(param)
-        score = param.train_and_eval(debug=DEBUG)
 
-        if not param.run_id or DEBUG: continue
-
-        checkpoint_dir = list(os.listdir(os.path.join(param.output_dir, 'checkpoints')))
-        scores = {checkpoint_dir[-1]: score} 
-        print(f'Evaluating {len(checkpoint_dir)} checkpoints')
-        for checkpoint_number in checkpoint_dir[:-1]:
-
-            checkpoint_path = os.path.join(param.output_dir, 'checkpoints', checkpoint_number)
-            score = eval_and_aggregate(checkpoint_path)
-            scores.update({checkpoint_number: score})
-
-            if not param.run_id or DEBUG: 
-                print('could not find a wandb project for logging eval scores')
-                print(score)
-                continue 
-
-            # resume the wandb run and log the result
-            wandb.init(
-                entity='tiny-transformers', project=param.group, id=run_id, resume='must'
-            )
-            wandb.log(result, step=int(checkpoint_number))
-            wandb.finish()
+        score = param.train_and_eval(all_checkpoints=True)
 

@@ -49,7 +49,7 @@ def run_babylm_pipeline(model_path: str, cuda_index: int = 0, verbose=True, debu
         f'conda run -n {ENV_NAME} --no-capture-output', # correct env & stream the output (rather than buffer)
         f'--cwd {path_to_common}',                      # run it in the `common` folder
         f'./evaluate.sh {model_path} {"debug" if debug else ""}',           # run the evaluation script
-        f'2>&1 | tee {log_file}'                        # log the output & stderr to 'eval.log
+        f'2>&1 | tee -a {log_file}'                        # log the output & stderr to 'eval.log
     ])
 
     process = subprocess.Popen(
