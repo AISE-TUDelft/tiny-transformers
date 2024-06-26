@@ -90,9 +90,6 @@ print(f'''
      and ROB has {rob.num_parameters():,} parameters.
     ''')
 
-# gpt, rob # uncomment to see model architecture
-
-# %%
 from transformers import PreTrainedTokenizer, PretrainedConfig
 
 def get_tokenizer_for_config(Tok: PreTrainedTokenizer, config: PretrainedConfig):

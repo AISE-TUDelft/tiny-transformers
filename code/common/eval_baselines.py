@@ -2,7 +2,7 @@ import os, sys, subprocess, json, torch, wandb, pandas as pd, traceback, time
 from tqdm.contrib.concurrent import process_map
 
 
-MODEL_DIR       = 'models/baseline'
+MODEL_DIR       = '../../../results/models_no_act'
 N_CUDA_DEVICES  = torch.cuda.device_count()
 ENV_NAME        = 'babylm'
 

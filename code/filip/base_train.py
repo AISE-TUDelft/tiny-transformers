@@ -81,7 +81,6 @@ print(f'''
     This GPT has {gpt.num_parameters():,} parameters,
      and ROB has {rob.num_parameters():,} parameters.
     ''')
-sys.exit()
 
 # gpt, rob # uncomment to see model architecture
 
