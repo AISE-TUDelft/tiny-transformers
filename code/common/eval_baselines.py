@@ -2,7 +2,7 @@ import os, sys, subprocess, json, torch, wandb, pandas as pd, traceback, time
 from tqdm.contrib.concurrent import process_map
 
 
-MODEL_DIR       = '../../../results/models_no_act'
+MODEL_DIR       = 'models/rope'
 N_CUDA_DEVICES  = torch.cuda.device_count()
 ENV_NAME        = 'babylm'
 
@@ -15,14 +15,14 @@ TASKS = {
               "island_effects", "npi_licensing", "quantifiers", "subject_verb_agreement"],
     "supplement": ["hypernym", "qa_congruence_easy", "qa_congruence_tricky",
                    "subject_aux_inversion", "turn_taking"],
-    "msgs": ["main_verb_control", "control_raising_control", "syntactic_category_control",
-             "relative_position_control", "lexical_content_the_control",
-             "main_verb_lexical_content_the", "main_verb_relative_token_position",
-             "control_raising_lexical_content_the", "control_raising_relative_token_position",
-             "syntactic_category_lexical_content_the", "syntactic_category_relative_position"]
+    # "msgs": ["main_verb_control", "control_raising_control", "syntactic_category_control",
+    #          "relative_position_control", "lexical_content_the_control",
+    #          "main_verb_lexical_content_the", "main_verb_relative_token_position",
+    #          "control_raising_lexical_content_the", "control_raising_relative_token_position",
+    #          "syntactic_category_lexical_content_the", "syntactic_category_relative_position"]
 }
 
-def run_babylm_pipeline(model_path: str, cuda_index: int = 0, verbose=True): 
+def run_babylm_pipeline(model_path: str, cuda_index: int = 0, verbose=True, debug=False): 
     ''' Run babylm pipeline, log training to a file `eval.log` under model_path 
         babylm creates `zeroshot` and `finetune` directories for the BLIMP and GLUE/MSGS tasks
 
@@ -31,17 +31,24 @@ def run_babylm_pipeline(model_path: str, cuda_index: int = 0, verbose=True):
         - verbose: print the output of the evaluation script to console (rather than stderr alone)
     '''
     # check if the current conda env is named 'babylm' (corresponding to the pipeline's env)
-    if not os.environ['CONDA_DEFAULT_ENV'] == ENV_NAME:
-        print(f'\033[1;31m WARNING: You are not in an environment named {ENV_NAME} \033[0m')
+    # if not os.environ['CONDA_DEFAULT_ENV'] == ENV_NAME:
+    #     print(f'\033[1;31m WARNING: You are not in an environment named {ENV_NAME} \033[0m')
 
     log_file = os.path.join(model_path, 'eval.log')
+    if debug: print('\t\033[31;1m EVALUATING IN DEBUG MODE (ONLY 1 EPOCH)\033[0m')
     print(f'\t\033[1m> Running BabyLM pipeline for {os.path.basename(model_path)} on GPU {cuda_index}\033[0m.\n')
     print(f'\033[90mFollow progress with: \ntail -f {log_file}')
+
+    path_to_common = os.path.abspath(os.path.join(os.getcwd(), 'common')) \
+            if not os.path.basename(os.getcwd()) == 'common' \
+            else os.path.abspath(os.getcwd())
+    print(f'path to common: {path_to_common}')
 
     command = ' '.join([
         f'CUDA_VISIBLE_DEVICES={cuda_index}',           # select the GPU
         f'conda run -n {ENV_NAME} --no-capture-output', # correct env & stream the output (rather than buffer)
-        f'./evaluate.sh {model_path}',                  # run the evaluation script
+        f'--cwd {path_to_common}',                      # run it in the `common` folder
+        f'./evaluate.sh {model_path} {"debug" if debug else ""}',           # run the evaluation script
         f'2>&1 | tee {log_file}'                        # log the output & stderr to 'eval.log
     ])
 
@@ -82,7 +89,8 @@ def is_evaluated(model_path, tasks=['zeroshot', 'finetune']):
 
     else: # make sure all task directories exist, and that each task subdir contains `all_results.json`
         finetune_files = [f for f in os.listdir(os.path.join(model_path, 'finetune'))]
-        for task in TASKS['glue'] + TASKS['msgs']:
+        finetune_tasks = TASKS['glue'] # + TASKS['msgs']
+        for task in finetune_tasks:
             if task not in finetune_files:
                 print(f'\t{model} did not evaluate on {task}')
                 is_evaluated = False
@@ -109,12 +117,18 @@ def get_scores(model_path, verbose=True) -> tuple[dict, dict, dict[str, dict], d
     # get FINETUNED scores 
     glue, msgs = {}, {} 
     for task in os.listdir(os.path.join(model_path, 'finetune')):
-        with open(os.path.join(model_path, 'finetune', task, 'all_results.json'), 'r') as f:
+        result_file_path = os.path.join(model_path, 'finetune', task, 'all_results.json')
+        if not os.path.exists(result_file_path):
+            print(f'\033[31;1m{os.path.join(model_path, "finetune", task)} exists, but doesn\'t contain all_results.json\033[0m')
+            continue
+
+        with open(result_file_path, 'r') as f:
 
             score = json.load(f)
             if task in TASKS['glue']: glue[task] = score
-            elif task in TASKS['msgs']: msgs[task] = score
-            else: raise ValueError(f"Invalid task: {task}!")
+            # elif task in TASKS['msgs']: msgs[task] = score
+            else: 
+                print(f'{os.path.join("finetune", task)} is not in tasks defined at the top of eval_baselines.py')
     
     if verbose: # print these babies
         print(f'\n\033[1mScores found in {model_path}\033[0m')
@@ -181,7 +195,7 @@ def aggregate_scores(blimp, supplement, glue, msgs, model) -> dict:
         **glue_metrics,
     }
 
-def add_to_wandb(result):
+def add_to_wandb(result, step=None):
     ''' Log results to wandb. For this you need to map the run name to its id 
         in the table, by downloading name, id columns from wandb. 
         In hindsight, it's probably easier to save this under the model to avoid duplicates. 
@@ -196,18 +210,19 @@ def add_to_wandb(result):
     wandb.init(
         entity='tiny-transformers', project='baselines', id=run_id, resume='must'
     )
-    wandb.log(result)
+    wandb.log(result, step=step)
     wandb.finish()
 
-def eval_and_aggregate(model_path: str, index: int = 0, verbose=True) -> dict:
+def eval_and_aggregate(model_path: str, index: int = 0, verbose=True, debug=False) -> dict:
     ''' Run evaluation, find all scores in the model dir, and aggregate them according 
         to how the BLiMP/GLUE/Super(GLUE)/MSGS papers describe. 
         Then, return aggregated scores as a big dic
 
-        - model_path: directory containing the model (.safetensors and config.json)
+        - model_path: path to the directory containing the model (.safetensors and config.json)
         - index: GPU index to run the evaluation on
     '''
     try: 
+        model_path = os.path.abspath(model_path)
         model = os.path.basename(model_path)
         print(f'\t\033[1m{model}\033[0m')
         print(f'\t\033[1m> Checking for predictions...\033[0m')
@@ -223,7 +238,7 @@ def eval_and_aggregate(model_path: str, index: int = 0, verbose=True) -> dict:
 
         else: 
             # t_0 = time.time()
-            run_babylm_pipeline(model_path, cuda_index=index, verbose=verbose)
+            run_babylm_pipeline(model_path, cuda_index=index, verbose=verbose, debug=debug)
             # double check that the evaluation actually worked
             if not is_evaluated(model_path):
                 raise FileNotFoundError(f'\033[1;31mEvaluation failed; skipping aggregation\033[0m (check eval.log in {model_path})')
@@ -237,7 +252,7 @@ def eval_and_aggregate(model_path: str, index: int = 0, verbose=True) -> dict:
         # result.update({'eval_time': time_taken})
 
         return result 
-    
+
     except Exception as e:
         print(f'\t\033[1;31mError in {model_path}:\033[0m\n')
         traceback.print_exc()
@@ -253,10 +268,10 @@ if __name__ == '__main__':
     models : list[dict] = [ 
         {
             'model_path': os.path.join(os.path.abspath(MODEL_DIR), model),
-            # 'index'     : i % N_CUDA_DEVICES, 
-            'index'     : 1, 
-            'verbose'   : False,
+            'index'     : 0, 
+            'verbose'   : True,
         } for i, model in 
+            # I'm mainly doing reversed sorted to start with the most recent model first
             enumerate(reversed(sorted(os.listdir(MODEL_DIR))))
     ]
 

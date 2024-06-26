@@ -1,6 +1,6 @@
 import os
 from typing import Optional, Tuple, Union
-
+from RoPE import apply_rotary_pos_emb, rotate_half, GPTNeoXRotaryEmbedding
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
@@ -38,6 +38,10 @@ class InfiniAttention(nn.Module):
                 f" {self.num_heads})."
             )
         
+        # The 1.0 is pct of the head_dim to use for rotary embedding
+        self.rotary_ndims = int(self.head_dim * 1.0)
+
+        self.rotary_emb = GPTNeoXRotaryEmbedding(self.rotary_ndims, self.config.max_position_embeddings, base=self.config.rotary_emb_base)
 
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
@@ -51,6 +55,10 @@ class InfiniAttention(nn.Module):
         self.z = torch.zeros((self.num_heads, self.head_dim, 1))
         # needs to become num_heads, head_dim, 1
         # self.register_buffer("z", torch.zeros((self.num_heads, self.head_dim, 1)))
+
+
+        self.segment_size = 128
+    
 
 
     def _split_heads(self, tensor, num_heads, attn_head_size):
@@ -132,6 +140,7 @@ class InfiniAttention(nn.Module):
         use_cache=False,
         output_attentions=False,
     ):  
+        has_layer_past = layer_past is not None
 
         query = self.q_proj(hidden_states)
         key = self.k_proj(hidden_states)
@@ -143,6 +152,21 @@ class InfiniAttention(nn.Module):
         query = self._split_heads(query, self.num_heads, self.head_dim)
         key = self._split_heads(key, self.num_heads, self.head_dim)
         value = self._split_heads(value, self.num_heads, self.head_dim)
+
+        # Compute rotary embeddings on rotary_ndims
+        query_rot = query[..., : self.rotary_ndims]
+        query_pass = query[..., self.rotary_ndims :]
+        key_rot = key[..., : self.rotary_ndims]
+        key_pass = key[..., self.rotary_ndims :]
+
+        # Compute token offset for rotary embeddings (when decoding)
+        seq_len = key.shape[-2]
+        if has_layer_past:
+            seq_len += layer_past[0].shape[-2]
+        cos, sin = self.rotary_emb(value, seq_len=seq_len)
+        query, key = apply_rotary_pos_emb(query_rot, key_rot, cos, sin, position_ids)
+        query = torch.cat((query, query_pass), dim=-1)
+        key = torch.cat((key, key_pass), dim=-1)
 
         if layer_past is not None:
             past_key = layer_past[0]
