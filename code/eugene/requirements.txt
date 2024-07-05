@@ -1,6 +1,8 @@
-transformers
 numpy
-datasets
+scipy
 jupyterlab
+transformers
+datasets
 accelerate
 wandb
+matplotlib

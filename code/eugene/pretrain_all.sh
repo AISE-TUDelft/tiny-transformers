@@ -1,6 +1,8 @@
-#!/bin/bash
+#!/bin/bash -l
 
-source venv/Scripts/activate
+conda activate pretrain
+
+# conda info
 
 # Check for the correct number of arguments
 if [ "$#" -ne 2 ]; then

@@ -83,7 +83,7 @@ class SparseRobertaConfig(PretrainedConfig):
 
     ```"""
 
-    model_type = "roberta"
+    model_type = "sparse_roberta"
 
     def __init__(
         self,
@@ -99,7 +99,7 @@ class SparseRobertaConfig(PretrainedConfig):
         type_vocab_size=2,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        pad_token_id=1,
+        pad_token_id=0,
         bos_token_id=0,
         eos_token_id=2,
         position_embedding_type="absolute",

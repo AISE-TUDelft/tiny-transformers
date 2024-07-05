@@ -76,7 +76,7 @@ class SparseGPTNeoConfig(PretrainedConfig):
 
     """
 
-    model_type = "gpt_neo"
+    model_type = "sparse_gpt_neo"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
 
@@ -100,6 +100,7 @@ class SparseGPTNeoConfig(PretrainedConfig):
         use_cache=True,
         bos_token_id=50256,
         eos_token_id=50256,
+        pad_token_id=0,
         sparsity_type = SparsityType.MOE,
         **kwargs,
     ):
@@ -121,6 +122,7 @@ class SparseGPTNeoConfig(PretrainedConfig):
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
 
         self.attention_types = attention_types
         self.attention_layers = self.expand_attention_types_params(attention_types)
@@ -136,7 +138,7 @@ class SparseGPTNeoConfig(PretrainedConfig):
                 "Please verify the value of `config.attention_types` argument."
             )
 
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, pad_token_id = pad_token_id, **kwargs)
 
     @staticmethod
     def expand_attention_types_params(attention_types):

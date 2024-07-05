@@ -37,4 +37,7 @@ class ControllerFFN(nn.Module):
         self.layer1 = nn.Linear(dim_in, dim_hidden)
         self.layer2 = nn.Linear(dim_hidden, dim_in)
     def forward(self, x):
-        return self.layer2(self.controller(x) * F.relu(self.layer1(x)))
+        z = self.controller(x) * F.relu(self.layer1(x))
+        # ideally z should be sparse, but sparsity is not well supported by torch. 
+        # z.to_sparse() cannot even be passed to linear layer because it cannot be reshaped
+        return self.layer2(z)

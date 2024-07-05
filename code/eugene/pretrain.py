@@ -26,14 +26,17 @@ def set_seeds(seed=123):
     torch.cuda.manual_seed_all(seed)
 
 # load training data
-def load_training_data(path="../../data/TokenizedTinyStories"):
-    return load_from_disk(path)
+def load_training_data(path="../../data/TokenizedTinyStories", debug = False):
+    if debug:
+        return load_from_disk(path)
+    else:
+        return load_from_disk(path, keep_in_memory=True)
 
 # load model according to config
 
 def get_tokenizer_for_config(tok, config):
     tokenizer = tok.from_pretrained(
-        'common/10k-tok',  # our custom tokenizer
+        '../common/10k-tok',  # our custom tokenizer
         model_max_length=512  # sequence length (context window)
     )
 
@@ -44,8 +47,8 @@ def get_tokenizer_for_config(tok, config):
     print(f'padding token in config: {config.pad_token_id}, in tokeniser: {tokenizer.pad_token_id}')
 
     return tokenizer
+
 def load_tokenizer_and_model(model_type, sparsity_type, sparsity_level):
-    model_name = ""
     if model_type == 'gpt':
         if sparsity_type == 'baseline':
             with open("model_configs/gpt_baseline.json",'r') as config_file:
@@ -92,7 +95,7 @@ def train(name, model, tokenizer, dataset, debug, gpu):
     os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu) # or "0,1" for multiple GPUs
     lr = 5e-4
     num_epochs = 2
-    batch_size = 32 if not debug else 8
+    batch_size = 16 if not debug else 8
     grad_accum_steps = 16
 
     output_dir = f'../../models/eugene/{name}'
@@ -152,6 +155,7 @@ def train(name, model, tokenizer, dataset, debug, gpu):
     else:
         trainer.train()
         trainer.save_model(output_dir)
+        torch.save(trainer.model.state_dict(), f'{output_dir}/{name}.pt')
 
     # evaluation, whose pipeline i dont have time figuring out at the moment
     # set_seeds()
@@ -183,7 +187,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     set_seeds()
-    dataset = load_training_data()
+    dataset = load_training_data(debug=args.debug)
 
 
     tokenizer, model = load_tokenizer_and_model(args.model_type, args.sparsity_type, args.sparsity_level)
