@@ -4,6 +4,7 @@ tokenized_dataset
 tokenized_dataset_small
 wandb
 models/sparse_pretrained
+models/superglue
 results
 code/lauri/10k-tok
 code/lauri/requirements.txt

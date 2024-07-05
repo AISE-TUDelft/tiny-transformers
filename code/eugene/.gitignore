@@ -1,4 +1,6 @@
 .idea
 wandb_key.txt
 __pycache__
+.ipynb_checkpoints
+sparse_ffn/.ipynb_checkpoints
 common
