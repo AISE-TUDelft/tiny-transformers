@@ -1,17 +1,39 @@
 ## Tiny Transformers
 
-This repository contains both the code and the papers for the Q4/2024 Bachelor Research Project: **Architectural Decisions for Language Modelling with (Small) Transformers**. 
+2024/Q4 Bachelor Research Project: **Architectural Decisions for Language Modelling with (Small) Transformers**, where we look at sample-efficient pre-training techniques at a small scale. 
 
-- [Zotero Group](https://www.zotero.org/groups/5467626/tiny_transformers) for managing our (shared) references.
-- [Mattermost Channel](https://mattermost.tudelft.nl/cse3000-2324q4/channels/tiny-transformers) for communication.
-- [Slide Deck](https://www.icloud.com/keynote/0487EgSVm26sNx1G3LGzfRtfw#Tiny_Transformers) for weekly meetings.
 
+#### Posters and Papers
+
+For context on the five transformer components studied, see the [Project Description](#architectural-decisions-for-language-modelling-with-small-transformers). One sentence synopsis: We train small BERT/GPT models (~10M parameters) on a [collection of short children stories](https://huggingface.co/datasets/roneneldan/TinyStories), and compare which techniques yield better performance on the [GLUE/BLiMP benchmarks](https://github.com/babylm/evaluation-pipeline-2023). 
+
+
+<table><thead>
+  <tr>
+    <th><img src='papers/posters/filip.jpg'/></th>
+    <th><img src='papers/posters/khalit.jpg'/></th>
+    <th><img src='papers/posters/lauri.jpg'/></th>
+    <th><img src='papers/posters/rafael.jpg'/></th>
+    <th><img src='papers/posters/yijun.jpg'/></th>
+  </tr></thead>
+<tbody>
+  <tr>
+    <td><b><a href='https://repository.tudelft.nl/record/uuid:71858285-c122-40a1-baec-6ba66525898d'>(Adaptive) Activation Functions</a></b><br/>Filip Ignijić</td>
+    <td><b><a href='https://repository.tudelft.nl/islandora/object/uuid%3A91494876-0d09-4542-98de-5b07b9aeb7c6'>Attention Heads & Dimensions</a></b><br/>Khalit Gulamov</td>
+    <td><b><a href='https://repository.tudelft.nl/islandora/object/uuid%3Aefa1e0f0-6342-4e25-a132-62a81465d2ff'>Infini-Attention at Its Limits</b></a><br/>Lauri Kesküll</td>
+    <td><b><a href='https://repository.tudelft.nl/islandora/object/uuid%3A067a0589-4f3d-46ad-8782-2e5f8c0f56b5'>Sample-Efficient Tokenisation</a></b><br/>Rafael Borges</td>
+    <td><b><a href='https://repository.tudelft.nl/islandora/object/uuid%3A7ac10cac-28f7-416d-9017-17a0b04d80e8'>Sparsity at a Fixed Model Size</a></b><br/>Eugene Wu</td>
+  </tr>
+</tbody>
+</table>
 
 #### Links
 
-> [!TIP] 
-> At the end of the project, let's add the paper and presentations here too. We also need a place to show off your posters :)
+- [Slide Deck](https://www.icloud.com/keynote/0487EgSVm26sNx1G3LGzfRtfw#Tiny_Transformers) for weekly meetings.
+- [Zotero Group](https://www.zotero.org/groups/5467626/tiny_transformers) for managing our (shared) references.
+- [Mattermost Channel](https://mattermost.tudelft.nl/cse3000-2324q4/channels/tiny-transformers) for communication.
 
+<!-- 
 | Student | Topic                              | Overleaf                                                          | Code                                                                                           |  Paper | Presentation |
 | ------- | ---------------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ------ | ------------ |
 | Eugene  | **Sparsity and Performance**       | [link](https://www.overleaf.com/6281436958jkbtpsjhvyvp#1252e1)    | [link](https://github.com/AISE-TUDelft/tiny-transformers/tree/main/code/eugene/)               | [link](https://repository.tudelft.nl/islandora/object/uuid%3A7ac10cac-28f7-416d-9017-17a0b04d80e8)       |              |
@@ -19,6 +41,8 @@ This repository contains both the code and the papers for the Q4/2024 Bachelor R
 | Khalit  | **Attention QKV & Heads**          | [link](https://www.overleaf.com/read/cwtdytkhbwrv#15d3ea)         | [link](https://github.com/AISE-TUDelft/tiny-transformers/tree/main/code/khalit_attention_QKV/) | [link](https://repository.tudelft.nl/islandora/object/uuid%3A91494876-0d09-4542-98de-5b07b9aeb7c6)       | [link](https://docs.google.com/presentation/d/1n07Vf7AkRj2qEvc8zSJKlLzYhmc-2fbQjlutpDBGWhg/edit?usp=sharing)            |
 | Lauri   | **Limits of Infini-Attention**     | [link](https://www.overleaf.com/read/cnfbzbhcqrbg#150dc6)         | [link](https://github.com/AISE-TUDelft/tiny-transformers/tree/main/code/lauri/)                | [link](https://repository.tudelft.nl/islandora/object/uuid%3Aefa1e0f0-6342-4e25-a132-62a81465d2ff)       |              |
 | Rafael  | **Comparing Tokenisation Schemes** | [link](https://www.overleaf.com/read/vcdhpwpgtnfg#280270)         | [link](https://github.com/AISE-TUDelft/tiny-transformers/tree/main/code/rafael-tokenisation/)  | [link](https://repository.tudelft.nl/islandora/object/uuid%3A067a0589-4f3d-46ad-8782-2e5f8c0f56b5)       |              |
+
+-->
 
 #### Guides
 See [`guides`](./guides/) for tutorials on remote development and implementation details. 
